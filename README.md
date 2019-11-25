@@ -1,8 +1,16 @@
 # TinyAVR/ATtiny
 
+### Information of this README and comments in this project may be incorrect. This project is not an official document of Microchip Technology Inc., Atmel Corporation, and other holders of any Intellectual Property (IP).
+
 ## Purpose
 
-* To Develop Application of TinyAVR/ATtiny Using C Language
+* To Develop Software of TinyAVR/ATtiny Using C Language and Assembler Language
+
+**About TinyAVR/ATtiny**
+
+* TinyAVR/ATtiny is a family of microcontrollers. Specially, I'm trying to make software of ATtiny13 which has 8 pins.
+
+* ATtiny13 is the simplest one. Available interfaces are PWM, ADC, GPIO, and Comparator. It also has a 8-bit timer/counter, and has a unique 9.6MHz RC oscillator which allows to make a software UART Tx with the baud rate 9600, 18200, 36400, etc.
 
 ## Installation
 

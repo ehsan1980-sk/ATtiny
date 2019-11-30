@@ -29,7 +29,7 @@ LFUSE := 0x7A
 all: $(OBJ1).hex
 $(OBJ1).hex: $(OBJ1).out
 	$(COPY) $< $@ -O ihex -R .eeprom
-	$(DUMP) -D -m $(ARCH) $@ > $(OBJ1).dump
+	$(DUMP) -D -m $(ARCH) $< > $(OBJ1).dump
 
 # Make Object File
 $(OBJ1).out: $(OBJ1).c

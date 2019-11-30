@@ -40,7 +40,7 @@ LFUSE := 0x7A
 all: $(NAME).hex
 $(NAME).hex: $(NAME).elf
 	$(COPY) $< $@ -O ihex -R .eeprom
-	$(DUMP) -D -m $(ARCH) $@ > $(NAME).dump
+	$(DUMP) -D -m $(ARCH) $< > $(NAME).dump
 
 $(NAME).elf: $(OBJ1).o
 	$(LINKER) $^ -o $@ -Map $(NAME).map

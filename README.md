@@ -14,10 +14,14 @@
 
 ## Installation
 
-* Install Packages to Raspbian Buster on Raspberry Pi
+* Install packages to Raspbian Buster on Raspberry Pi.
 
 ```bash
-# Programmer
+# Do as Superuser, Install Git and Make
+sudo apt-get update
+sudo apt-get install git
+sudo apt-get install make
+# AVR Programmer
 sudo apt-get install avrdude
 sudo apt-get install avrdude-doc
 # Binary Utilities including GNU Assmebler
@@ -29,15 +33,15 @@ sudo apt-get install gcc-avr
 sudo apt-get install avr-libc
 ```
 
-* Open /etc/avrdude.conf
+* Open /etc/avrdude.conf to enable programming with GPIOs.
 
 ```bash
 sudo nano /etc/avrdude.conf
 ```
 
-* Uncomment and Modify "linuxgpio" Lines as Follows
+* Uncomment and modify "linuxgpio" lines as follows. In this case, GPIO22 for RESET of TinyAVR/ATtiny, GPIO23 for SCK, GPIO24 for MOSI, and GPIO25 for MISO.
 
-```bash
+```
 programmer
   id    = "linuxgpio";
   desc  = "Use the Linux sysfs interface to bitbang GPIO lines";
@@ -48,6 +52,25 @@ programmer
   miso  = 25;
 ;
 ```
+
+* Connect Raspberry Pi and TinyAVR/ATtiny through assigned GPIOs. When connecting assigned GPIOs and TinyAVR/ATtiny pins to program, use appropriate resisters to limit electric current for hardware's safety. DON'T INPUT VOLTAGE OVER 3.3V TO GPIO PIN! OTHERWISE, YOU WILL BE IN DANGER!
+
+* Connect 3.3V Power of Raspberry Pi to VCC of TinyAVR/ATtiny, GND of Raspberry Pi to GND of TinyAVR/ATtiny. NEVER USE 5.0V Power.
+
+* Clone this project using Git, and compile the code then program the binary to TinyAVR/ATtiny
+
+```bash
+cd ~/Desktop
+git clone https://github.com/JimmyKenMerchant/ATtiny.git
+# Enter Directory
+cd ATtiny/blinker
+# Compile
+make
+# Program Binary to TinyAVR/ATtiny
+make install
+```
+
+* Place programmed TinyAVR/ATtiny to your circuit.
 
 ## Technical Notes
 

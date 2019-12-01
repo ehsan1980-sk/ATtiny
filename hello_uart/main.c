@@ -52,7 +52,7 @@ void software_uart_init( uint8_t portb_pin_number_for_tx ) {
 }
 
 void software_uart_print_9600( char* string, uint16_t length, uint8_t portb_pin_number_for_tx ) {
-	for( uint8_t i = 0; i < length; i++ ) software_uart_tx_9600( string[i], portb_pin_number_for_tx );
+	for( uint16_t i = 0; i < length; i++ ) software_uart_tx_9600( string[i], portb_pin_number_for_tx );
 }
 
 void software_uart_tx_9600( uint8_t character, uint8_t portb_pin_number_for_tx ) {

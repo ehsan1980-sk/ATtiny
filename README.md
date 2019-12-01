@@ -53,14 +53,15 @@ programmer
 
 **December 1, 2019**
 
-* `cat /proc/cpuinfo | grep "Model"`: Raspberry Pi 3 Model B Rev 1.2
-* `lsb_release -a | grep "Description"`: Raspbian GNU/Linux 10 (buster)
+* `cat /proc/cpuinfo | grep 'Model'`: Raspberry Pi 3 Model B Rev 1.2
+* `lsb_release -a | grep 'Description'`: Raspbian GNU/Linux 10 (buster)
 * `git --version`: git version 2.20.1
 * `make --version`: GNU Make 4.2.1 Built for arm-unknown-linux-gnueabihf
 * `avr-gcc --version`: avr-gcc (GCC) 5.4.0
 * `avr-as --version`: GNU assembler (GNU Binutils) 2.26.20160125
 * `avra --version`: AVRA: advanced AVR macro assembler Version 1.3.0 Build 1 (8 May 2010)
 * `avrdude -v`: Version 6.3-20171130
+* `apt-cache show avr-libc | grep 'Version'`: 1:2.0.0+Atmel3.6.1-2
 * Description: Take these commands at the terminal of Raspbian I use for this project.
 
 ## Links of References

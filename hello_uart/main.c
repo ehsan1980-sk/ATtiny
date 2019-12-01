@@ -8,6 +8,7 @@
  */
 
 #define F_CPU 9600000UL // Default 9.6Mhz to ATtiny13
+#include <stdlib.h>
 #include <avr/io.h>
 #include <avr/cpufunc.h>
 #include <util/delay.h>
@@ -20,11 +21,24 @@ uint8_t software_uart_tx_pin;
 
 int main(void) {
 	software_uart_init( 3 );
+	software_uart_print_9600( "Hello World!\r\n", 14 );
+
+	// Counter Reset
+	TCNT0 = 0;
+	// Select CTC Mode
+	TCCR0A = _BV(WGM01);
+	// Set TOP for CTC Mode
+	OCR0A = 0xFF;
+	// Start Counter with I/O-Clock / 64
+	TCCR0B = _BV(CS01)|_BV(CS00);
 
 	while(1) {
-		software_uart_tx_9600( 0x35, 3 );
+		// Send Random Value
+		srand(TCNT0<<8|TCNT0); // uint16_t
+		srand(rand());
+		software_uart_tx_9600( rand(), software_uart_tx_pin );
 		software_uart_print_9600( "Hello World!\r\n", 14 );
-		_delay_ms( 1000 );
+		_delay_ms( 500 );
 	}
 	return 0;
 }

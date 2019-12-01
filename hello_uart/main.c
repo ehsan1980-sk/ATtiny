@@ -14,14 +14,15 @@
 #include <util/delay.h>
 #include <util/delay_basic.h>
 
-void software_uart_init( uint8_t portb_pin_number );
-void software_uart_print_9600( char* string, uint16_t length );
-void software_uart_tx_9600( uint8_t character, uint8_t portb_pin_number );
+void software_uart_init( uint8_t portb_pin_number_for_tx );
+void software_uart_print_9600( char* string, uint16_t length, uint8_t portb_pin_number_for_tx );
+void software_uart_tx_9600( uint8_t character, uint8_t portb_pin_number_for_tx );
 uint8_t software_uart_tx_pin;
 
 int main(void) {
+	uint16_t random_value = 0;
+
 	software_uart_init( 3 );
-	software_uart_print_9600( "Hello World!\r\n", 14 );
 
 	// Counter Reset
 	TCNT0 = 0;
@@ -34,27 +35,27 @@ int main(void) {
 
 	while(1) {
 		// Send Random Value
-		srand(TCNT0<<8|TCNT0); // uint16_t
-		srand(rand());
-		software_uart_tx_9600( rand(), software_uart_tx_pin );
-		software_uart_print_9600( "Hello World!\r\n", 14 );
+		srand(random_value - (TCNT0<<8|TCNT0)); // uint16_t
+		random_value = rand();
+		software_uart_tx_9600( (uint8_t)random_value, software_uart_tx_pin );
+		software_uart_print_9600( "Hello World!\r\n", 14, software_uart_tx_pin );
 		_delay_ms( 500 );
 	}
 	return 0;
 }
 
-void software_uart_init( uint8_t portb_pin_number ) {
-	PORTB |= _BV( portb_pin_number );
-	DDRB |= _BV( portb_pin_number );
+void software_uart_init( uint8_t portb_pin_number_for_tx ) {
+	PORTB |= _BV( portb_pin_number_for_tx );
+	DDRB |= _BV( portb_pin_number_for_tx );
 	_NOP();
-	software_uart_tx_pin = portb_pin_number;
+	software_uart_tx_pin = portb_pin_number_for_tx;
 }
 
-void software_uart_print_9600( char* string, uint16_t length ) {
-	for( uint8_t i = 0; i < length; i++ ) software_uart_tx_9600( string[i], software_uart_tx_pin );
+void software_uart_print_9600( char* string, uint16_t length, uint8_t portb_pin_number_for_tx ) {
+	for( uint8_t i = 0; i < length; i++ ) software_uart_tx_9600( string[i], portb_pin_number_for_tx );
 }
 
-void software_uart_tx_9600( uint8_t character, uint8_t portb_pin_number ) {
+void software_uart_tx_9600( uint8_t character, uint8_t portb_pin_number_for_tx ) {
 	/**
 	 * First Argument is r24, Second Argument is r22 (r25 to r8, Assign Even Number Registers)
 	 * r18-r27, r30-r31 are scratch registers.
@@ -63,7 +64,7 @@ void software_uart_tx_9600( uint8_t character, uint8_t portb_pin_number ) {
 	 */
 	register const uint8_t count_delay asm("r18") = 247; // 247 * 4, 988 Clocks
 	register uint8_t count asm("r19");
-	register uint8_t set_bit_pin asm("r20") = _BV( portb_pin_number );
+	register uint8_t set_bit_pin asm("r20") = _BV( portb_pin_number_for_tx );
 	register uint8_t clear_bit_pin asm("r21") = ~( set_bit_pin );;
 	register uint8_t i asm("r22") = 9;
 	asm volatile (

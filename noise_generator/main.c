@@ -16,25 +16,46 @@
 
 int main(void) {
 	uint16_t random_value = 0xFFFF; // Non-zero Value
+	uint8_t pin_button = _BV(PINB4); // Assign PB4 as Button Input
 
 	PORTB = 0; // All Low
-	DDRB |= _BV(DDB1); // Bit Value Set (Same as Logical Shift Left) PB1 (OC0B) as Output
+	DDRB = 0; // All Input
+	PORTB |= _BV(PB4); // Pullup Button Input (There is No Internal Pulldown)
+	DDRB &= ~(_BV(DDB1)); // Bit Value Clear PB1 as Output
+	DDRB &= ~(_BV(DDB4)); // Bit Value Clear PB4 as Input
 	_NOP(); // Wait for Synchronization
 
 	// Counter Reset
 	TCNT0 = 0;
-	// Reset Toggle Timing for OC0B
-	OCR0B = 0;
-	// Select CTC Mode and Toggle Output on OC0B
-	TCCR0A = _BV(WGM01)|_BV(COM0B0);
-	// Start Counter with I/O-Clock / 256, 37500 Hz to Approx. 73.24 Hz
-	TCCR0B = _BV(CS02);
+
+	// Timer Status Reset
+	TCCR0A = 0;
+	TCCR0B = 0;
 
 	while(1) {
-		// Send Random Value
-		srand(random_value - (TCNT0<<8|TCNT0)); // uint16_t
-		random_value = rand();
-		OCR0B = random_value;
+		if ( ! (PINB & pin_button) ) { // Output Noise
+			srand(random_value - (TCNT0<<8|TCNT0)); // uint16_t
+			random_value = rand();
+			OCR0B = random_value;
+			// Start Output
+			if ( ! ( DDRB & _BV(DDB1) ) ) {
+				// Bit Value Set (Same as Logical Shift Left) PB1 (OC0B) as Output
+				DDRB |= _BV(DDB1);
+				// Select Fast PWM Mode and Output on OC0B
+				TCCR0A = _BV(COM0B1)|_BV(WGM01)|_BV(WGM00);
+				// Start Counter with I/O-Clock / 8, 9.6MHz / ( 8 * 256 ) = 4687.5Hz
+				TCCR0B = _BV(CS00);
+			}
+		} else { // No Output
+			// Stop Output
+			if ( DDRB & _BV(DDB1) ) {
+				// Timer Status Reset
+				TCCR0A = 0;
+				TCCR0B = 0;
+				// Bit Value Clear PB1 as Output
+				DDRB &= ~(_BV(DDB1));
+			}
+		}
 	}
 	return 0;
 }

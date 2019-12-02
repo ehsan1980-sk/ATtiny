@@ -6,7 +6,7 @@
 ##
 
 # Name of Program
-NAME := noise_generator
+NAME := adc_uart
 
 # Main C Code
 OBJ1 := main

@@ -43,17 +43,17 @@ int main(void) {
 				DDRB |= _BV(DDB1);
 				// Select Fast PWM Mode and Output on OC0B
 				TCCR0A = _BV(COM0B1)|_BV(WGM01)|_BV(WGM00);
-				// Start Counter with I/O-Clock / 8, 9.6MHz / ( 8 * 256 ) = 4687.5Hz
+				// Start Counter with I/O-Clock, 9.6MHz / ( 1 * 256 ) = 37500Hz
 				TCCR0B = _BV(CS00);
 			}
 		} else { // No Output
 			// Stop Output
 			if ( DDRB & _BV(DDB1) ) {
-				// Timer Status Reset
-				TCCR0A = 0;
-				TCCR0B = 0;
 				// Bit Value Clear PB1 as Output
 				DDRB &= ~(_BV(DDB1));
+				// Timer Status Reset
+				TCCR0B = 0;
+				TCCR0A = 0;
 			}
 		}
 	}

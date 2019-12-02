@@ -55,9 +55,9 @@ programmer
 
 * Connect Raspberry Pi and TinyAVR/ATtiny through assigned GPIOs. When connecting assigned GPIOs and TinyAVR/ATtiny pins to program, use appropriate resisters to limit electric current for hardware's safety. DON'T INPUT VOLTAGE OVER 3.3V TO GPIO PIN! OTHERWISE, YOU WILL BE IN DANGER!
 
-* Connect 3.3V Power of Raspberry Pi to VCC of TinyAVR/ATtiny, GND of Raspberry Pi to GND of TinyAVR/ATtiny. NEVER USE 5.0V Power.
+* Connect 3.3V Power of Raspberry Pi to VCC of TinyAVR/ATtiny, GND of Raspberry Pi to GND of TinyAVR/ATtiny. NEVER USE 5.0V POWER.
 
-* Clone this project using Git, and compile the code then program the binary to TinyAVR/ATtiny
+* Clone this project using Git, and compile the code then program the binary to TinyAVR/ATtiny.
 
 ```bash
 cd ~/Desktop

@@ -56,7 +56,7 @@ int main(void) {
 				TCCR0B &= pwm_stop;
 				// PB1 (OC0B) Low
 				PORTB &= pwm_clear;
-				// Bit Value Clear PB1(OC0B)
+				// Bit Value Clear PB1(OC0B), High-Z State
 				DDRB &= output_stop;
 			}
 		}

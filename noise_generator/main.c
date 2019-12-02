@@ -21,15 +21,16 @@ int main(void) {
 	PORTB = 0; // All Low
 	DDRB = 0; // All Input
 	PORTB |= _BV(PB4); // Pullup Button Input (There is No Internal Pulldown)
-	DDRB &= ~(_BV(DDB1)); // Bit Value Clear PB1 as Output
-	DDRB &= ~(_BV(DDB4)); // Bit Value Clear PB4 as Input
+	DDRB |= _BV(DDB1); // Bit Value Set PB1 (OC0B) as Output
+	DDRB &= ~(_BV(DDB4)); // Bit Value Clear PB4 as Button Input
 	_NOP(); // Wait for Synchronization
 
 	// Counter Reset
 	TCNT0 = 0;
 
-	// Timer Status Reset
-	TCCR0A = 0;
+	// Select Fast PWM Mode and Output on OC0B
+	TCCR0A = _BV(COM0B1)|_BV(WGM01)|_BV(WGM00);
+	// Stop Counter
 	TCCR0B = 0;
 
 	while(1) {
@@ -38,22 +39,15 @@ int main(void) {
 			random_value = rand();
 			OCR0B = random_value;
 			// Start Output
-			if ( ! ( DDRB & _BV(DDB1) ) ) {
-				// Bit Value Set (Same as Logical Shift Left) PB1 (OC0B) as Output
-				DDRB |= _BV(DDB1);
-				// Select Fast PWM Mode and Output on OC0B
-				TCCR0A = _BV(COM0B1)|_BV(WGM01)|_BV(WGM00);
+			if ( ! TCCR0B ) {
 				// Start Counter with I/O-Clock, 9.6MHz / ( 1 * 256 ) = 37500Hz
 				TCCR0B = _BV(CS00);
 			}
 		} else { // No Output
 			// Stop Output
-			if ( DDRB & _BV(DDB1) ) {
-				// Bit Value Clear PB1 as Output
-				DDRB &= ~(_BV(DDB1));
-				// Timer Status Reset
+			if ( TCCR0B ) {
+				// Stop Counter
 				TCCR0B = 0;
-				TCCR0A = 0;
 			}
 		}
 	}

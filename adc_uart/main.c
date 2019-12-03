@@ -20,10 +20,11 @@ void software_uart_tx_38400( uint8_t character, uint8_t portb_pin_number_for_tx 
 uint8_t software_uart_tx_pin;
 
 int main(void) {
-	uint8_t select_adc_channel_2 = _BV(MUX1); // ADC2 (PB4)
-	uint8_t clear_adc_channel = ~(_BV(MUX1)|_BV(MUX0));
-	uint8_t start_adc = _BV(ADSC);
-	uint16_t value_adc;
+	uint8_t const select_adc_channel_2 = _BV(MUX1); // ADC2 (PB4)
+	uint8_t const clear_adc_channel = ~(_BV(MUX1)|_BV(MUX0));
+	uint8_t const start_adc = _BV(ADSC);
+	uint8_t value_adc_channel_2_low;
+	uint8_t value_adc_channel_2_high;
 
 	PORTB = 0; // All Low
 	DDRB = 0; // All Input
@@ -41,12 +42,11 @@ int main(void) {
 		ADCSRA |= start_adc;
 		while( ADCSRA & start_adc );
 		ADMUX &= clear_adc_channel;
-		//value_adc |= ADCL>>6; // Read Low Bits First
-		//value_adc = ADCH<<2; // ADC[9:0] Will Be Updated After High Bits Are Read.
-		value_adc = ADCH; // 8-bit Resolution in 3.3V to VCC
+		value_adc_channel_2_low = ADCL; // Read Low Bits First
+		value_adc_channel_2_high = ADCH; // ADC[9:0] Will Be Updated After High Bits Are Read.
 
-		software_uart_tx_38400( (uint8_t)value_adc, software_uart_tx_pin );
-		software_uart_tx_38400( (uint8_t)value_adc>>8, software_uart_tx_pin );
+		software_uart_tx_38400( value_adc_channel_2_low, software_uart_tx_pin );
+		software_uart_tx_38400( value_adc_channel_2_high, software_uart_tx_pin );
 		_delay_ms( 500 );
 	}
 	return 0;

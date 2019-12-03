@@ -99,7 +99,7 @@ void software_uart_tx_9600( uint8_t character, uint8_t portb_pin_number_for_tx )
 			"out %[portb], __tmp_reg__" "\n\t"
 			//count_delay * 4 Cycles
 			"mov %[count], %[count_delay]" "\n\t"
-			"inc %[count]" "\n\t"
+			"inc %[count]" "\n\t" // 248 * 4, 992 Clocks + 8 Clock from out to ret at Last
 			"software_uart_tx_9600_stopbit_delay:" "\n\t"
 				"nop" "\n\t"
 				"subi %[count], 0x1" "\n\t"

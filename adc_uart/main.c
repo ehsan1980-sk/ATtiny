@@ -14,17 +14,26 @@
 #include <util/delay.h>
 #include <util/delay_basic.h>
 
+/**
+ * Send 12-bit 2 Channels as Follows (ADC is 10-bit Resolution)
+ * First Byte: Bit[7] Always High, Bit[6:5] Channel Number, Bit[4:0] Most Significant 5 Bits
+ * Second Byte: Bit[7] Always Low, Bit[6:0] Least Significant 7 Bits
+ */
+
 void software_uart_init( uint8_t portb_pin_number_for_tx );
 void software_uart_print_38400( char* string, uint16_t length, uint8_t portb_pin_number_for_tx );
 void software_uart_tx_38400( uint8_t character, uint8_t portb_pin_number_for_tx );
 uint8_t software_uart_tx_pin;
 
 int main(void) {
+	uint8_t const select_adc_channel_1 = _BV(MUX0); // ADC1 (PB2)
 	uint8_t const select_adc_channel_2 = _BV(MUX1); // ADC2 (PB4)
 	uint8_t const clear_adc_channel = ~(_BV(MUX1)|_BV(MUX0));
 	uint8_t const start_adc = _BV(ADSC);
-	uint8_t value_adc_channel_2_low;
-	uint8_t value_adc_channel_2_high;
+	uint8_t value_adc_channel_1_low; // Bit[7:6] Is ADC[1:0]
+	uint8_t value_adc_channel_1_high; // Bit[7:0] Is ADC[9:2]
+	uint8_t value_adc_channel_2_low; // Bit[7:6] Is ADC[1:0]
+	uint8_t value_adc_channel_2_high; // Bit[7:0] Is ADC[9:2]
 
 	PORTB = 0; // All Low
 	DDRB = 0; // All Input
@@ -38,15 +47,24 @@ int main(void) {
 	ADCSRA = _BV(ADEN)|_BV(ADPS2)|_BV(ADPS1);
 
 	while(1) {
+		ADMUX |= select_adc_channel_1;
+		ADCSRA |= start_adc;
+		while( ADCSRA & start_adc );
+		ADMUX &= clear_adc_channel;
+		value_adc_channel_1_low = ADCL; // Read Low Bits First
+		value_adc_channel_1_high = ADCH; // ADC[9:0] Will Be Updated After High Bits Are Read
+
 		ADMUX |= select_adc_channel_2;
 		ADCSRA |= start_adc;
 		while( ADCSRA & start_adc );
 		ADMUX &= clear_adc_channel;
 		value_adc_channel_2_low = ADCL; // Read Low Bits First
-		value_adc_channel_2_high = ADCH; // ADC[9:0] Will Be Updated After High Bits Are Read.
+		value_adc_channel_2_high = ADCH; // ADC[9:0] Will Be Updated After High Bits Are Read
 
-		software_uart_tx_38400( value_adc_channel_2_low, software_uart_tx_pin );
-		software_uart_tx_38400( value_adc_channel_2_high, software_uart_tx_pin );
+		software_uart_tx_38400( 0x80|1<<5|value_adc_channel_1_high>>5, software_uart_tx_pin ); // First Byte for ADC Channel 1
+		software_uart_tx_38400( 0x7F&(value_adc_channel_1_high<<2|value_adc_channel_1_low>>6), software_uart_tx_pin ); // Second Byte for ADC Channel 1
+		software_uart_tx_38400( 0x80|2<<5|value_adc_channel_2_high>>5, software_uart_tx_pin ); // First Byte for ADC Channel 2
+		software_uart_tx_38400( 0x7F&(value_adc_channel_2_high<<2|value_adc_channel_2_low>>6), software_uart_tx_pin ); // Second Byte for ADC Channel 2
 		_delay_ms( 500 );
 	}
 	return 0;

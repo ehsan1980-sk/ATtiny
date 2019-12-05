@@ -11,6 +11,8 @@
 #include <stdlib.h>
 #include <avr/io.h>
 #include <avr/cpufunc.h>
+#include <avr/interrupt.h>
+#include <avr/sleep.h>
 #include <util/delay.h>
 #include <util/delay_basic.h>
 
@@ -29,7 +31,7 @@ int main(void) {
 	uint8_t const select_adc_channel_1 = _BV(MUX0); // ADC1 (PB2)
 	uint8_t const select_adc_channel_2 = _BV(MUX1); // ADC2 (PB4)
 	uint8_t const clear_adc_channel = ~(_BV(MUX1)|_BV(MUX0));
-	uint8_t const start_adc = _BV(ADSC);
+	//uint8_t const start_adc = _BV(ADSC);
 	uint8_t value_adc_channel_1_low; // Bit[7:6] Is ADC[1:0]
 	uint8_t value_adc_channel_1_high; // Bit[7:0] Is ADC[9:2]
 	uint8_t value_adc_channel_2_low; // Bit[7:6] Is ADC[1:0]
@@ -37,26 +39,44 @@ int main(void) {
 
 	PORTB = 0; // All Low
 	DDRB = 0; // All Input
+	// For Noise Reduction of ADC, Disable All Digital Input Buffers
+	DIDR0 = _BV(ADC0D)|_BV(ADC2D)|_BV(ADC3D)|_BV(ADC1D)|_BV(AIN1D)|_BV(AIN0D);
 
 	software_uart_init( 3 );
 
 	// Set ADC, Vcc as Reference, ADLAR
 	ADMUX = _BV(ADLAR);
-	// Enable ADC, Prescaler 64 to Have ADC Clock 150Khz.
-	// Set more speed for ADC Clock (600Khz), although it affects the absolute resolution. Set ADLAR and get only ADCH for 8 bit resolution.
-	ADCSRA = _BV(ADEN)|_BV(ADPS2)|_BV(ADPS1);
+
+	// ADC Enable, ADC Interrupt Enable, Prescaler 64 to Have ADC Clock 150Khz
+	// Memo: Set more speed for ADC Clock (600Khz), although it affects the absolute resolution. Set ADLAR and get only ADCH for 8 bit resolution.
+	ADCSRA = _BV(ADEN)|_BV(ADIE)|_BV(ADPS2)|_BV(ADPS1);
+
+	// Set Sleep Mode as ADC Noise Reduction Mode
+	set_sleep_mode(SLEEP_MODE_ADC);
 
 	while(1) {
 		ADMUX |= select_adc_channel_1;
-		ADCSRA |= start_adc;
-		while( ADCSRA & start_adc );
+		//ADCSRA |= start_adc;
+		//while( ADCSRA & start_adc );
+		// Start ADC with Noise Reduction Mode
+		sleep_enable();
+		sei(); // Start to Issue Interrupt
+		sleep_cpu();
+		sleep_disable();
+		cli(); // Stop to Issue Interrupt
 		ADMUX &= clear_adc_channel;
 		value_adc_channel_1_low = ADCL; // Read Low Bits First
 		value_adc_channel_1_high = ADCH; // ADC[9:0] Will Be Updated After High Bits Are Read
 
 		ADMUX |= select_adc_channel_2;
-		ADCSRA |= start_adc;
-		while( ADCSRA & start_adc );
+		//ADCSRA |= start_adc;
+		//while( ADCSRA & start_adc );
+		// Start ADC with Noise Reduction Mode
+		sleep_enable();
+		sei(); // Start to Issue Interrupt
+		sleep_cpu();
+		sleep_disable();
+		cli(); // Stop to Issue Interrupt
 		ADMUX &= clear_adc_channel;
 		value_adc_channel_2_low = ADCL; // Read Low Bits First
 		value_adc_channel_2_high = ADCH; // ADC[9:0] Will Be Updated After High Bits Are Read
@@ -69,6 +89,9 @@ int main(void) {
 	}
 	return 0;
 }
+
+// For ADC Noise Reduction Mode
+EMPTY_INTERRUPT(ADC_vect);
 
 void software_uart_init( uint8_t portb_pin_number_for_tx ) {
 	PORTB |= _BV( portb_pin_number_for_tx );

@@ -31,6 +31,8 @@ uint8_t const voltage_bias = 0x80;
 uint8_t const absolute_peak = 0x7F;
 
 int main(void) {
+	OSCCAL += 0x02; // Frequency Calibration for Individual Difference at VCC = 3.0V
+
 	PORTB = 0; // All Low
 	DDRB = 0; // All Input
 	PORTB |= _BV(PB4); // Pullup Button Input (There is No Internal Pulldown)

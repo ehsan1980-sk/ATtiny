@@ -25,6 +25,7 @@
 #define SAMPLE_RATE (F_CPU / 256) // 37500
 uint8_t const voltage_bias = 0x80;
 uint8_t const absolute_peak = 0x7F; // For Square Wave
+uint8_t osccal_default;
 
 uint16_t sample_count = 0; // 0-255
 uint16_t count_per_pi = 0; // Count per Pi (Approx. 3.14) Radian
@@ -47,9 +48,12 @@ uint16_t delta_sawtooth = 0; // Fixed Point Arithmetic, Bit[15:12] Reserved for 
 uint8_t function_start = 0;
 
 int main(void) {
+	uint8_t const select_adc_channel_1 = _BV(MUX0); // ADC1 (PB2)
 	uint8_t const select_adc_channel_2 = _BV(MUX1); // ADC2 (PB4)
 	uint8_t const clear_adc_channel = ~(_BV(MUX1)|_BV(MUX0));
 	uint8_t const start_adc = _BV(ADSC);
+	uint8_t value_adc_channel_1_high_buffer = 0; // Bit[7:0] Is ADC[9:2]
+	uint8_t value_adc_channel_1_high = 0; // Bit[7:0] Is ADC[9:2]
 	uint8_t value_adc_channel_2_high_buffer = 0; // Bit[7:0] Is ADC[9:2]
 	uint8_t value_adc_channel_2_high = 0; // Bit[7:0] Is ADC[9:2]
 	uint16_t count_per_2pi_buffer = 0;
@@ -57,6 +61,7 @@ int main(void) {
 	/* Clock Calibration */
 
 	OSCCAL += 0x03; // Frequency Calibration for Individual Difference at VCC = 3.3V
+	osccal_default = OSCCAL;
 
 	/* I/O Settings */
 
@@ -97,11 +102,20 @@ int main(void) {
 	TCCR0B = _BV(CS00);
 
 	while(1) {
+		ADMUX |= select_adc_channel_1;
+		ADCSRA |= start_adc;
+		while( ADCSRA & start_adc );
+		ADMUX &= clear_adc_channel;
+		value_adc_channel_1_high_buffer = ADCH; // ADC[9:0] Will Be Updated After High Bits Are Read
+		if ( value_adc_channel_1_high_buffer != value_adc_channel_1_high ) {
+			value_adc_channel_1_high = value_adc_channel_1_high_buffer;
+			OSCCAL = osccal_default + ((int8_t)(0x80^(value_adc_channel_1_high)) >> 4); // Arithmetic Logical Shift Right
+		}
+
 		ADMUX |= select_adc_channel_2;
 		ADCSRA |= start_adc;
 		while( ADCSRA & start_adc );
 		ADMUX &= clear_adc_channel;
-
 		value_adc_channel_2_high_buffer = ADCH; // ADC[9:0] Will Be Updated After High Bits Are Read
 		if ( value_adc_channel_2_high_buffer != value_adc_channel_2_high ) {
 			value_adc_channel_2_high = value_adc_channel_2_high_buffer;

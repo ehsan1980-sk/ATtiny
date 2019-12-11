@@ -23,7 +23,7 @@
  * In default, the voltage vias is set as 0x80, the lowest peak is set as 0x01, the highest peak is set as 0xFF.
  */
 
-#define SAMPLE_RATE (double)(F_CPU / 256) // 37500 Samples per Seconds
+#define SAMPLE_RATE (double)(F_CPU / 256 * 256) // 146.484375 Samples per Seconds
 #define VOLTAGE_BIAS 0x80
 #define ABSOLUTE_PEAK 0x7F // For Square Wave
 #define PEAK_HIGH (VOLTAGE_BIAS + ABSOLUTE_PEAK)
@@ -124,8 +124,8 @@ int main(void) {
 	// Fast PWM Mode (7) can make variable frequencies with adjustable duty cycle by settting OCR0A as TOP, but OC0B is only available.
 	TCCR0A = _BV(WGM01)|_BV(WGM00)|_BV(COM0B1)|_BV(COM0A1);
 
-	// Start Counter with I/O-Clock 9.6MHz / ( 1 * 256 ) = 37500Hz
-	TCCR0B = _BV(CS00);
+	// Start Counter with I/O-Clock 9.6MHz / ( 256 * 256 ) = 146.484375Hz
+	TCCR0B = _BV(CS02);
 
 	while(1) {
 		ADMUX |= select_adc_channel_1;
@@ -135,27 +135,27 @@ int main(void) {
 		value_adc_channel_1_high_buffer = ADCH; // ADC[9:0] Will Be Updated After High Bits Are Read
 		if ( value_adc_channel_1_high_buffer != value_adc_channel_1_high ) {
 			value_adc_channel_1_high = value_adc_channel_1_high_buffer;
-			/* Pentatonic Scale, A Minor and C Major, 37500 Samples per Seconds */
+			/* 146.484375 Samples per Seconds */
 			if ( value_adc_channel_1_high >= 224 ) {
-				count_per_2pi_buffer = 35; // C6 1046.50 Hz
+				count_per_2pi_buffer = 18; // 8 Hz
 				osccal_tuning = 1;
 			} else if ( value_adc_channel_1_high >= 192 ) {
-				count_per_2pi_buffer = 41; // A5 880.00 Hz
-				osccal_tuning = -1;
+				count_per_2pi_buffer = 36; // 4 Hz
+				osccal_tuning = 1;
 			} else if ( value_adc_channel_1_high >= 160 ) {
-				count_per_2pi_buffer = 47; // G5 783.99 Hz
-				osccal_tuning = 1;
+				count_per_2pi_buffer = 72; // 2 Hz
+				osccal_tuning = 0;
 			} else if ( value_adc_channel_1_high >= 128 ) {
-				count_per_2pi_buffer = 56; // E 659.26
-				osccal_tuning = 1;
+				count_per_2pi_buffer = 145; // 1 Hz
+				osccal_tuning = 0;
 			} else if ( value_adc_channel_1_high >= 96 ) {
-				count_per_2pi_buffer = 63; // D5 587.33 Hz
-				osccal_tuning = 1;
+				count_per_2pi_buffer = 292; // 0.5 Hz
+				osccal_tuning = 0;
 			} else if ( value_adc_channel_1_high >= 64 ) {
-				count_per_2pi_buffer = 70; // C5 523.25 Hz
+				count_per_2pi_buffer = 585; // 0.25 Hz
 				osccal_tuning = 0;
 			} else if ( value_adc_channel_1_high >= 32 ) {
-				count_per_2pi_buffer = 84; // A4 440.00 Hz
+				count_per_2pi_buffer = 1171; // 0.125 Hz
 				osccal_tuning = 0;
 			} else { // ADC Value < 32
 				count_per_2pi_buffer = 0;
@@ -215,16 +215,8 @@ ISR(TIM0_OVF_vect) {
 			OCR0A = PEAK_LOW;
 			fixed_value_sawtooth = PEAK_LOW << 4;
 		} else if ( sample_count < count_per_2pi ) {
-			/* Equivalence of */
-			// Prepare for Fixed Point Arithmetic, Bit[11:4] UINT8, Bit[3:0] Fractional Part
-			//temp = sample_count << 4;
-			// Fixed Point Arithmetic (MUL), Logical Shift Right 4 Times to Make Bit[7:0] UINT8
-			//temp = ((fixed_delta_sawtooth * temp) >> 4 ) >> 4;
-			//temp += PEAK_LOW;
-			/* And */
 			fixed_value_sawtooth += fixed_delta_sawtooth; // Fixed Point Arithmetic (ADD)
 			temp = fixed_value_sawtooth >> 4; // Make Bit[7:0] UINT8
-			/* End of Equivalence */
 			if ( temp > 0xFF ) temp = 0xFF; // Saturate at 8-bit
 			OCR0A = temp;
 		} else {

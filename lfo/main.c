@@ -217,6 +217,7 @@ ISR(TIM0_OVF_vect) {
 		} else if ( sample_count < count_per_2pi ) {
 			fixed_value_sawtooth += fixed_delta_sawtooth; // Fixed Point Arithmetic (ADD)
 			temp = fixed_value_sawtooth >> 4; // Make Bit[7:0] UINT8
+			if ( 0x0008 & fixed_value_sawtooth ) temp++; // Check Fractional Part Bit[3] (0.5) to Round Off
 			if ( temp > 0xFF ) temp = 0xFF; // Saturate at 8-bit
 			OCR0A = temp;
 		} else {

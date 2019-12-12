@@ -218,13 +218,15 @@ ISR(TIM0_OVF_vect) {
 			/* Equivalence of */
 			// Prepare for Fixed Point Arithmetic, Bit[11:4] UINT8, Bit[3:0] Fractional Part
 			//temp = sample_count << 4;
-			// Fixed Point Arithmetic (MUL), Logical Shift Right 4 Times to Make Bit[7:0] UINT8
-			//temp = ((fixed_delta_sawtooth * temp) >> 4 ) >> 4;
-			//temp += PEAK_LOW;
+			// Fixed Point Arithmetic (MUL)
+			//fixed_value_sawtooth = ((fixed_delta_sawtooth * temp) >> 4 ) + (PEAK_LOW << 4);
+			// Logical Shift Right 4 Times to Make Bit[7:0] UINT8
+			//temp = fixed_value_sawtooth >> 4;
 			/* And */
 			fixed_value_sawtooth += fixed_delta_sawtooth; // Fixed Point Arithmetic (ADD)
 			temp = fixed_value_sawtooth >> 4; // Make Bit[7:0] UINT8
 			/* End of Equivalence */
+			if ( 0x0008 & fixed_value_sawtooth ) temp++; // Check Fractional Part Bit[3] (0.5) to Round Off
 			if ( temp > 0xFF ) temp = 0xFF; // Saturate at 8-bit
 			OCR0A = temp;
 		} else {

@@ -103,33 +103,33 @@ int main(void) {
 		while( ADCSRA & start_adc );
 		ADMUX &= clear_adc_channel;
 		value_adc_channel_1_high_buffer = ADCH; // ADC[9:0] Will Be Updated After High Bits Are Read
-		if ( abs( (int8_t)(value_adc_channel_1_high_buffer - value_adc_channel_1_high) ) >= THRESHOLD ) {
+		if ( value_adc_channel_1_high_buffer < THRESHOLD ) {
+			// Stop Output
+			if ( DDRB & output_start_1 ) {
+				// PWM Output 1 Stop
+				TCCR0A &= pwm_output_a_stop;
+				// PB0 (OC0A) Low
+				PORTB &= output_clear_1;
+				// Bit Value Clear PB0 (OC0A), High-Z State
+				DDRB &= output_stop_1;
+				// Clear Output Compare A
+				OCR0A = 0;
+				// Clear Stepping Value of ADC Channel 1
+				value_adc_channel_1_high = 0;
+			}
+		} else if ( abs( (int8_t)(value_adc_channel_1_high_buffer - value_adc_channel_1_high) ) >= THRESHOLD ) {
 			value_adc_channel_1_high = value_adc_channel_1_high_buffer;
-			if ( value_adc_channel_1_high ) { // PWM Output 1
-				// Start Output
-				if ( ! ( DDRB & output_start_1 ) ) {
-					// PWM Output 1 Start
-					TCCR0A |= pwm_output_a_start;
-					// Bit Value Set PB0 (OC0A) as Output
-					DDRB |= output_start_1;
-					// Set Output Compare A
-					OCR0A = value_adc_channel_1_high;
-				} else {
-					// Set Output Compare A
-					OCR0A = value_adc_channel_1_high;
-				}
-			} else { // No Output
-				// Stop Output
-				if ( DDRB & output_start_1 ) {
-					// PWM Output 1 Stop
-					TCCR0A &= pwm_output_a_stop;
-					// PB0 (OC0A) Low
-					PORTB &= output_clear_1;
-					// Bit Value Clear PB0 (OC0A), High-Z State
-					DDRB &= output_stop_1;
-					// Clear Output Compare A
-					OCR0A = 0;
-				}
+			// Start Output
+			if ( ! ( DDRB & output_start_1 ) ) {
+				// PWM Output 1 Start
+				TCCR0A |= pwm_output_a_start;
+				// Bit Value Set PB0 (OC0A) as Output
+				DDRB |= output_start_1;
+				// Set Output Compare A
+				OCR0A = value_adc_channel_1_high;
+			} else {
+				// Set Output Compare A
+				OCR0A = value_adc_channel_1_high;
 			}
 		}
 
@@ -138,34 +138,33 @@ int main(void) {
 		while( ADCSRA & start_adc );
 		ADMUX &= clear_adc_channel;
 		value_adc_channel_2_high_buffer = ADCH; // ADC[9:0] Will Be Updated After High Bits Are Read
-		if ( abs( (int8_t)(value_adc_channel_2_high_buffer - value_adc_channel_2_high) ) >= THRESHOLD ) {
+		if ( value_adc_channel_2_high_buffer < THRESHOLD ) {
+			// Stop Output
+			if ( DDRB & output_start_2 ) {
+				// PWM Output 2 Stop
+				TCCR0A &= pwm_output_b_stop;
+				// PB1 (OC0B) Low
+				PORTB &= output_clear_2;
+				// Bit Value Clear PB1 (OC0B), High-Z State
+				DDRB &= output_stop_2;
+				// Clear Output Compare B
+				OCR0B = 0;
+				// Clear Stepping Value of ADC Channel 2
+				value_adc_channel_2_high = 0;
+			}
+		} else if ( abs( (int8_t)(value_adc_channel_2_high_buffer - value_adc_channel_2_high) ) >= THRESHOLD ) {
 			value_adc_channel_2_high = value_adc_channel_2_high_buffer;
-
-			if ( value_adc_channel_2_high ) { // PWM Output 2
-				// Start Output
-				if ( ! ( DDRB & output_start_2 ) ) {
-					// PWM Output 2 Start
-					TCCR0A |= pwm_output_b_start;
-					// Bit Value Set PB1 (OC0B) as Output
-					DDRB |= output_start_2;
-					// Set Output Compare B
-					OCR0B = value_adc_channel_2_high;
-				} else {
-					// Set Output Compare B
-					OCR0B = value_adc_channel_2_high;
-				}
-			} else { // No Output
-				// Stop Output
-				if ( DDRB & output_start_2 ) {
-					// PWM Output 2 Stop
-					TCCR0A &= pwm_output_b_stop;
-					// PB1 (OC0B) Low
-					PORTB &= output_clear_2;
-					// Bit Value Clear PB1 (OC0B), High-Z State
-					DDRB &= output_stop_2;
-					// Clear Output Compare B
-					OCR0B = 0;
-				}
+			// Start Output
+			if ( ! ( DDRB & output_start_2 ) ) {
+				// PWM Output 2 Start
+				TCCR0A |= pwm_output_b_start;
+				// Bit Value Set PB1 (OC0B) as Output
+				DDRB |= output_start_2;
+				// Set Output Compare B
+				OCR0B = value_adc_channel_2_high;
+			} else {
+				// Set Output Compare B
+				OCR0B = value_adc_channel_2_high;
 			}
 		}
 

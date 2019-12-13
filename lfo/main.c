@@ -23,7 +23,7 @@
  * In default, the voltage vias is set as 0x80, the lowest peak is set as 0x01, the highest peak is set as 0xFF.
  */
 
-#define SAMPLE_RATE (double)(F_CPU / 256 * 256) // 146.484375 Samples per Seconds
+#define SAMPLE_RATE (double)(F_CPU / 510 * 64) // Approx. 294.117647 Samples per Seconds
 #define VOLTAGE_BIAS 0x80
 #define ABSOLUTE_PEAK 0x7F // For Square Wave
 #define PEAK_HIGH (VOLTAGE_BIAS + ABSOLUTE_PEAK)
@@ -120,12 +120,12 @@ int main(void) {
 	// Set Timer/Counter0 Overflow Interrupt for "ISR(TIM0_OVF_vect)"
 	TIMSK0 = _BV(TOIE0);
 
-	// Select Fast PWM Mode (3) and Output from OC0A Non-inverted and OC0B Non-inverted
-	// Fast PWM Mode (7) can make variable frequencies with adjustable duty cycle by settting OCR0A as TOP, but OC0B is only available.
-	TCCR0A = _BV(WGM01)|_BV(WGM00)|_BV(COM0B1)|_BV(COM0A1);
+	// Select PWM (Phase Correct) Mode (1) and Output from OC0A Non-inverted and OC0B Non-inverted
+	// PWM (Phase Correct) Mode (5) can make variable frequencies with adjustable duty cycle by settting OCR0A as TOP, but OC0B is only available.
+	TCCR0A = _BV(WGM00)|_BV(COM0B1)|_BV(COM0A1);
 
-	// Start Counter with I/O-Clock 9.6MHz / ( 256 * 256 ) = 146.484375Hz
-	TCCR0B = _BV(CS02);
+	// Start Counter with I/O-Clock 9.6MHz / ( 510 * 64 ) = Approx. 294.117647Hz
+	TCCR0B = _BV(CS00)|_BV(CS01);
 
 	while(1) {
 		ADMUX |= select_adc_channel_1;
@@ -135,27 +135,27 @@ int main(void) {
 		value_adc_channel_1_high_buffer = ADCH; // ADC[9:0] Will Be Updated After High Bits Are Read
 		if ( value_adc_channel_1_high_buffer != value_adc_channel_1_high ) {
 			value_adc_channel_1_high = value_adc_channel_1_high_buffer;
-			/* 146.484375 Samples per Seconds */
+			/* Approx. 294.117647 Samples per Seconds */
 			if ( value_adc_channel_1_high >= 224 ) {
-				count_per_2pi_buffer = 18; // 8 Hz
+				count_per_2pi_buffer = 36; // 8 Hz
 				osccal_tuning = 1;
 			} else if ( value_adc_channel_1_high >= 192 ) {
-				count_per_2pi_buffer = 36; // 4 Hz
-				osccal_tuning = 1;
+				count_per_2pi_buffer = 72; // 4 Hz
+				osccal_tuning = 0;
 			} else if ( value_adc_channel_1_high >= 160 ) {
-				count_per_2pi_buffer = 72; // 2 Hz
+				count_per_2pi_buffer = 146; // 2 Hz
 				osccal_tuning = 0;
 			} else if ( value_adc_channel_1_high >= 128 ) {
-				count_per_2pi_buffer = 145; // 1 Hz
+				count_per_2pi_buffer = 293; // 1 Hz
 				osccal_tuning = 0;
 			} else if ( value_adc_channel_1_high >= 96 ) {
-				count_per_2pi_buffer = 292; // 0.5 Hz
+				count_per_2pi_buffer = 587; // 0.5 Hz
 				osccal_tuning = 0;
 			} else if ( value_adc_channel_1_high >= 64 ) {
-				count_per_2pi_buffer = 585; // 0.25 Hz
+				count_per_2pi_buffer = 1175; // 0.25 Hz
 				osccal_tuning = 0;
 			} else if ( value_adc_channel_1_high >= 32 ) {
-				count_per_2pi_buffer = 1171; // 0.125 Hz
+				count_per_2pi_buffer = 2352; // 0.125 Hz
 				osccal_tuning = 0;
 			} else { // ADC Value < 32
 				count_per_2pi_buffer = 0;

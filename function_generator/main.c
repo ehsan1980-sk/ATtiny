@@ -15,12 +15,14 @@
 #include <util/delay.h>
 #include <util/delay_basic.h>
 
+#define CALIB_OSCCAL 0x03 // Frequency Calibration for Individual Difference at VCC = 3.3V
+
 /**
  * Output Sawtooth Wave from PB0 (OC0A)
  * Output Square Wave from PB1 (OC0B)
  * Input from PB2 (ADC1) to Determine Output Frequency
  * Input from PB4 (ADC2) to Calibrate Output Frequency, ADC Value 0 Means -16, ADC Value 255 Means +15
- * In default, the voltage vias is set as 0x80, the lowest peak is set as 0x01, the highest peak is set as 0xFF.
+ * In default, the voltage bias is set as 0x80, the lowest peak is set as 0x01, the highest peak is set as 0xFF.
  */
 
 #define SAMPLE_RATE (double)(F_CPU / 256) // 37500 Samples per Seconds
@@ -86,7 +88,7 @@ int main(void) {
 
 	/* Clock Calibration */
 
-	osccal_default += 0x03; // Frequency Calibration for Individual Difference at VCC = 3.3V
+	osccal_default += CALIB_OSCCAL; // Frequency Calibration for Individual Difference at VCC = 3.3V
 	OSCCAL = osccal_default;
 
 	/* I/O Settings */

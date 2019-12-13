@@ -117,7 +117,7 @@ int main(void) {
 				// Clear Stepping Value of ADC Channel 1
 				value_adc_channel_1_high = 0;
 			}
-		} else if ( abs( (int8_t)(value_adc_channel_1_high_buffer - value_adc_channel_1_high) ) >= THRESHOLD ) {
+		} else if ( abs( (int16_t)(value_adc_channel_1_high_buffer - value_adc_channel_1_high) ) >= THRESHOLD ) {
 			value_adc_channel_1_high = value_adc_channel_1_high_buffer;
 			// Start Output
 			if ( ! ( DDRB & output_start_1 ) ) {
@@ -152,7 +152,7 @@ int main(void) {
 				// Clear Stepping Value of ADC Channel 2
 				value_adc_channel_2_high = 0;
 			}
-		} else if ( abs( (int8_t)(value_adc_channel_2_high_buffer - value_adc_channel_2_high) ) >= THRESHOLD ) {
+		} else if ( abs( (int16_t)(value_adc_channel_2_high_buffer - value_adc_channel_2_high) ) >= THRESHOLD ) {
 			value_adc_channel_2_high = value_adc_channel_2_high_buffer;
 			// Start Output
 			if ( ! ( DDRB & output_start_2 ) ) {

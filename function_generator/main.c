@@ -217,57 +217,41 @@ ISR(TIM0_OVF_vect) {
 		if ( sample_count == 0 ) {
 			OCR0A = PEAK_LOW;
 			fixed_value_sawtooth = PEAK_LOW << 4;
-		} else if ( sample_count < count_per_2pi ) {
-			/* Equivalence of */
-			// Prepare for Fixed Point Arithmetic, Bit[11:4] UINT8, Bit[3:0] Fractional Part
-			//temp = sample_count << 4;
-			// Fixed Point Arithmetic (MUL)
-			//fixed_value_sawtooth = ((fixed_delta_sawtooth * temp) >> 4 ) + (PEAK_LOW << 4);
-			// Logical Shift Right 4 Times to Make Bit[7:0] UINT8
-			//temp = fixed_value_sawtooth >> 4;
-			/* And */
+		} else if ( sample_count <= count_per_2pi ) {
 			fixed_value_sawtooth += fixed_delta_sawtooth; // Fixed Point Arithmetic (ADD)
 			temp = fixed_value_sawtooth >> 4; // Make Bit[7:0] UINT8
-			/* End of Equivalence */
 			if ( 0x0008 & fixed_value_sawtooth ) temp++; // Check Fractional Part Bit[3] (0.5) to Round Off
 			if ( temp > PEAK_HIGH ) temp = PEAK_HIGH; // Saturate at Least 8-bit
 			OCR0A = temp;
-		} else {
-			OCR0A = PEAK_HIGH;
 		}
 		// Triangle Wave
-		if ( ! toggle_triangle ) {
+		if ( ! toggle_triangle ) { // Increment
 			if ( sample_count == 0 ) {
 				OCR0B = PEAK_LOW;
 				fixed_value_triangle = PEAK_LOW << 4;
-			} else if ( sample_count < count_per_2pi ) {
+			} else if ( sample_count <= count_per_2pi ) {
 				fixed_value_triangle += fixed_delta_sawtooth; // Fixed Point Arithmetic (ADD)
 				temp = fixed_value_triangle >> 4; // Make Bit[7:0] UINT8
 				if ( 0x0008 & fixed_value_triangle ) temp++; // Check Fractional Part Bit[3] (0.5) to Round Off
 				if ( temp > PEAK_HIGH ) temp = PEAK_HIGH; // Saturate at Least 8-bit
 				OCR0B = temp;
-			} else {
-				OCR0B = PEAK_HIGH;
-				toggle_triangle ^= 1;
 			}
 		} else {
-			if ( sample_count == 0 ) {
-				OCR0B = PEAK_HIGH;
-				fixed_value_triangle = PEAK_HIGH << 4;
-			} else if ( sample_count < count_per_2pi ) {
+			if ( sample_count == 0 ) { // Decrement
+				OCR0B = fixed_value_triangle;
+			} else if ( sample_count <= count_per_2pi ) {
 				fixed_value_triangle -= fixed_delta_sawtooth; // Fixed Point Arithmetic (ADD)
 				temp = fixed_value_triangle >> 4; // Make Bit[7:0] UINT8
-				if ( 0x0008 & fixed_value_triangle ) temp++; // Check Fractional Part Bit[3] (0.5) to Round Off
 				if ( temp < PEAK_LOW ) temp = PEAK_LOW; // Saturate at Least 8-bit
 				OCR0B = temp;
-			} else {
-				OCR0B = PEAK_LOW;
-				toggle_triangle ^= 1;
 			}
 
 		}
 		sample_count++;
-		if ( sample_count > count_per_2pi ) sample_count = 0;
+		if ( sample_count > count_per_2pi ) {
+			sample_count = 0;
+			toggle_triangle ^= 1;
+		}
 	} else { // Stop Function
 		OCR0A = PEAK_LOW;
 		OCR0B = PEAK_LOW;

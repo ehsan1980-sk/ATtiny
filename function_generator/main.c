@@ -19,18 +19,15 @@
 
 /**
  * Output Sawtooth Wave from PB0 (OC0A)
- * Output Square Wave from PB1 (OC0B)
+ * Output Triangle Wave from PB1 (OC0B), Frequency: Twice as Much as Sawtooth Wave
  * Input from PB2 (ADC1) to Determine Output Frequency
  * Input from PB4 (ADC2) to Calibrate Output Frequency, ADC Value 0 Means -16, ADC Value 255 Means +15
- * In default, the voltage bias is set as 0x80, the lowest peak is set as 0x01, the highest peak is set as 0xFF.
  */
 
 #define SAMPLE_RATE (double)(F_CPU / 256) // 37500 Samples per Seconds
-#define VOLTAGE_BIAS 0x80
-#define ABSOLUTE_PEAK 0x7F // For Square Wave
-#define PEAK_HIGH (VOLTAGE_BIAS + ABSOLUTE_PEAK)
-#define PEAK_LOW (VOLTAGE_BIAS - ABSOLUTE_PEAK)
-#define PEAK_TO_PEAK (ABSOLUTE_PEAK * 2)
+#define PEAK_LOW 0x00
+#define PEAK_HIGH 0xFF
+#define PEAK_TO_PEAK (PEAK_HIGH - PEAK_LOW)
 
 /* Global Variables without Initialization to Define at .bss Section and Squash .data Section */
 
@@ -49,6 +46,8 @@ uint16_t count_per_2pi; // Count per 2Pi Radian
 
 uint16_t fixed_value_sawtooth; // Fixed Point Arithmetic, Bit[15:12] Reserved for Calculation, Bit[11:4] UINT8, Bit[3:0] Fractional Part
 uint16_t fixed_delta_sawtooth; // Fixed Point Arithmetic, Bit[15:12] Reserved for Calculation, Bit[11:4] UINT8, Bit[3:0] Fractional Part
+uint16_t fixed_value_triangle; // Fixed Point Arithmetic, Bit[15:12] Reserved for Calculation, Bit[11:4] UINT8, Bit[3:0] Fractional Part
+uint8_t toggle_triangle;
 
 /**
  *                         PEAK_TO_PEAK
@@ -84,6 +83,8 @@ int main(void) {
 	count_per_2pi = 0;
 	fixed_value_sawtooth = 0;
 	fixed_delta_sawtooth = 0;
+	fixed_value_triangle = 0;
+	toggle_triangle = 0;
 	function_start = 0;
 
 	/* Clock Calibration */
@@ -114,10 +115,10 @@ int main(void) {
 	TCNT0 = 0;
 
 	// Set Output Compare A
-	OCR0A = VOLTAGE_BIAS;
+	OCR0A = PEAK_LOW;
 
 	// Set Output Compare B
-	OCR0B = VOLTAGE_BIAS;
+	OCR0B = PEAK_LOW;
 
 	// Set Timer/Counter0 Overflow Interrupt for "ISR(TIM0_OVF_vect)"
 	TIMSK0 = _BV(TOIE0);
@@ -229,21 +230,46 @@ ISR(TIM0_OVF_vect) {
 			temp = fixed_value_sawtooth >> 4; // Make Bit[7:0] UINT8
 			/* End of Equivalence */
 			if ( 0x0008 & fixed_value_sawtooth ) temp++; // Check Fractional Part Bit[3] (0.5) to Round Off
-			if ( temp > 0xFF ) temp = 0xFF; // Saturate at 8-bit
+			if ( temp > PEAK_HIGH ) temp = PEAK_HIGH; // Saturate at Least 8-bit
 			OCR0A = temp;
 		} else {
 			OCR0A = PEAK_HIGH;
 		}
-		// Square Wave
-		if ( sample_count <= count_per_pi ) {
-			OCR0B = PEAK_HIGH;
+		// Triangle Wave
+		if ( ! toggle_triangle ) {
+			if ( sample_count == 0 ) {
+				OCR0B = PEAK_LOW;
+				fixed_value_triangle = PEAK_LOW << 4;
+			} else if ( sample_count < count_per_2pi ) {
+				fixed_value_triangle += fixed_delta_sawtooth; // Fixed Point Arithmetic (ADD)
+				temp = fixed_value_triangle >> 4; // Make Bit[7:0] UINT8
+				if ( 0x0008 & fixed_value_triangle ) temp++; // Check Fractional Part Bit[3] (0.5) to Round Off
+				if ( temp > PEAK_HIGH ) temp = PEAK_HIGH; // Saturate at Least 8-bit
+				OCR0B = temp;
+			} else {
+				OCR0B = PEAK_HIGH;
+				toggle_triangle ^= 1;
+			}
 		} else {
-			OCR0B = PEAK_LOW;
+			if ( sample_count == 0 ) {
+				OCR0B = PEAK_HIGH;
+				fixed_value_triangle = PEAK_HIGH << 4;
+			} else if ( sample_count < count_per_2pi ) {
+				fixed_value_triangle -= fixed_delta_sawtooth; // Fixed Point Arithmetic (ADD)
+				temp = fixed_value_triangle >> 4; // Make Bit[7:0] UINT8
+				if ( 0x0008 & fixed_value_triangle ) temp++; // Check Fractional Part Bit[3] (0.5) to Round Off
+				if ( temp < PEAK_LOW ) temp = PEAK_LOW; // Saturate at Least 8-bit
+				OCR0B = temp;
+			} else {
+				OCR0B = PEAK_LOW;
+				toggle_triangle ^= 1;
+			}
+
 		}
 		sample_count++;
 		if ( sample_count > count_per_2pi ) sample_count = 0;
 	} else { // Stop Function
-		OCR0A = VOLTAGE_BIAS;
-		OCR0B = VOLTAGE_BIAS;
+		OCR0A = PEAK_LOW;
+		OCR0B = PEAK_LOW;
 	}
 }

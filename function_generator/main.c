@@ -22,6 +22,9 @@
  * Output Triangle Wave from PB1 (OC0B), Frequency: Twice as Much as Sawtooth Wave
  * Input from PB2 (ADC1) to Determine Output Frequency
  * Input from PB4 (ADC2) to Calibrate Output Frequency, ADC Value 0 Means -16, ADC Value 255 Means +15
+ * Note: The wave may not reach the high peak, 0xFF (255) in default,
+ *       because of its low precision decimal system.
+ *       Especially, the lower frequency loses the high peak, e.g., 0.125Hz reaches up to 0xEE (238).
  */
 
 #define SAMPLE_RATE (double)(F_CPU / 256) // 37500 Samples per Seconds
@@ -44,9 +47,9 @@ uint16_t count_per_2pi; // Count per 2Pi Radian
  *                       Frequency
  */
 
-uint16_t fixed_value_sawtooth; // Fixed Point Arithmetic, Bit[15:14] Reserved for Calculation, Bit[13:6] UINT8, Bit[5:0] Fractional Part
-uint16_t fixed_delta_sawtooth; // Fixed Point Arithmetic, Bit[15:14] Reserved for Calculation, Bit[13:6] UINT8, Bit[5:0] Fractional Part
-uint16_t fixed_value_triangle; // Fixed Point Arithmetic, Bit[15:14] Reserved for Calculation, Bit[13:6] UINT8, Bit[5:0] Fractional Part
+uint16_t fixed_value_sawtooth; // Fixed Point Arithmetic, Bit[15] Sign, Bit[14:7] UINT8, Bit[6:0] Fractional Part
+uint16_t fixed_delta_sawtooth; // Fixed Point Arithmetic, Bit[15] Sign, Bit[14:7] UINT8, Bit[6:0] Fractional Part
+uint16_t fixed_value_triangle; // Fixed Point Arithmetic, Bit[15] Sign, Bit[14:7] UINT8, Bit[6:0] Fractional Part
 uint8_t toggle_triangle;
 
 /**
@@ -141,31 +144,31 @@ int main(void) {
 			/* Pentatonic Scale, A Minor and C Major, 37500 Samples per Seconds */
 			if ( value_adc_channel_1_high >= 224 ) {
 				count_per_2pi_buffer = 35; // C6 1046.50 Hz
-				fixed_delta_sawtooth_buffer = 7<<6|0b010010;
+				fixed_delta_sawtooth_buffer = 7<<7|0b0100100;
 				osccal_tuning = 1;
 			} else if ( value_adc_channel_1_high >= 192 ) {
 				count_per_2pi_buffer = 41; // A5 880.00 Hz
-				fixed_delta_sawtooth_buffer = 6<<6|0b001110;
+				fixed_delta_sawtooth_buffer = 6<<7|0b0011100;
 				osccal_tuning = -1;
 			} else if ( value_adc_channel_1_high >= 160 ) {
 				count_per_2pi_buffer = 47; // G5 783.99 Hz
-				fixed_delta_sawtooth_buffer = 5<<6|0b011011;
+				fixed_delta_sawtooth_buffer = 5<<7|0b0110110;
 				osccal_tuning = 1;
 			} else if ( value_adc_channel_1_high >= 128 ) {
 				count_per_2pi_buffer = 56; // E 659.26
-				fixed_delta_sawtooth_buffer = 4<<6|0b100011;
+				fixed_delta_sawtooth_buffer = 4<<7|0b1000110;
 				osccal_tuning = 1;
 			} else if ( value_adc_channel_1_high >= 96 ) {
 				count_per_2pi_buffer = 63; // D5 587.33 Hz
-				fixed_delta_sawtooth_buffer = 4<<6|0b000011;
+				fixed_delta_sawtooth_buffer = 4<<7|0b0000110;
 				osccal_tuning = 1;
 			} else if ( value_adc_channel_1_high >= 64 ) {
 				count_per_2pi_buffer = 70; // C5 523.25 Hz
-				fixed_delta_sawtooth_buffer = 3<<6|0b101001;
+				fixed_delta_sawtooth_buffer = 3<<7|0b1010010;
 				osccal_tuning = 0;
 			} else if ( value_adc_channel_1_high >= 32 ) {
 				count_per_2pi_buffer = 84; // A4 440.00 Hz
-				fixed_delta_sawtooth_buffer = 3<<6|0b000010;
+				fixed_delta_sawtooth_buffer = 3<<7|0b0000100;
 				osccal_tuning = 0;
 			} else { // ADC Value < 32
 				count_per_2pi_buffer = 0;
@@ -174,26 +177,27 @@ int main(void) {
 			}
 			if ( count_per_2pi_buffer != count_per_2pi ) {
 				if ( count_per_2pi_buffer ) {
-					// Fixed Point Arithmetic (DIV), LSL6 to Dividend
-					//fixed_delta_sawtooth_buffer = ((PEAK_TO_PEAK << 6) << 6) / (count_per_2pi_buffer << 6);
+					// Fixed Point Arithmetic (DIV), LSL7 to Dividend, Needed UINT32
+					//fixed_delta_sawtooth_buffer = ((PEAK_TO_PEAK << 7) << 7) / (count_per_2pi_buffer << 7);
 					cli(); // Stop to Issue Interrupt
 					sample_count = 0;
+					toggle_triangle = 0;
 					count_per_2pi = count_per_2pi_buffer;
 					count_per_pi = count_per_2pi >> 1;
 					fixed_delta_sawtooth = fixed_delta_sawtooth_buffer;
 					function_start = 1;
-					OSCCAL = osccal_default + osccal_tuning + osccal_calibration;
 					sei(); // Start to Issue Interrupt
 				} else {
 					cli(); // Stop to Issue Interrupt
 					sample_count = 0;
+					toggle_triangle = 0;
 					count_per_2pi = 0;
 					count_per_pi = 0;
 					fixed_delta_sawtooth = 0;
 					function_start = 0;
-					OSCCAL = osccal_default + osccal_tuning + osccal_calibration;
 					sei(); // Start to Issue Interrupt
 				}
+				OSCCAL = osccal_default + osccal_tuning + osccal_calibration;
 			}
 		}
 
@@ -223,24 +227,27 @@ ISR(TIM0_OVF_vect) {
 		// Saw Tooth Wave
 		if ( sample_count == 0 ) {
 			OCR0A = PEAK_LOW;
-			fixed_value_sawtooth = PEAK_LOW << 6;
+			fixed_value_sawtooth = PEAK_LOW << 7;
 		} else if ( sample_count <= count_per_2pi ) {
+			/* Equivalence of */
+			// Fixed Point Arithmetic (MUL), LSR7 after Multiplication, Needed UINT32
+			//fixed_value_sawtooth = ((fixed_delta_sawtooth * (sample_count << 7)) >> 7) + (PEAK_LOW << 7);
+			/* And */
 			fixed_value_sawtooth += fixed_delta_sawtooth; // Fixed Point Arithmetic (ADD)
-			temp = fixed_value_sawtooth >> 6; // Make Bit[7:0] UINT8
-			if ( 0x0020 & fixed_value_sawtooth ) temp++; // Check Fractional Part Bit[5] (0.5) to Round Off
-			if ( temp > PEAK_HIGH ) temp = PEAK_HIGH; // Saturate at Least 8-bit
+			/* End of Equivalence */
+			temp = (fixed_value_sawtooth << 1) >> 8; // Make Bit[7:0] UINT8 (Considered of Clock Cycle)
+			if ( 0x0040 & fixed_value_sawtooth ) temp++; // Check Fractional Part Bit[6] (0.5) to Round Off
 			OCR0A = temp;
 		}
 		// Triangle Wave
 		if ( ! toggle_triangle ) { // Increment
 			if ( sample_count == 0 ) {
 				OCR0B = PEAK_LOW;
-				fixed_value_triangle = PEAK_LOW << 6;
+				fixed_value_triangle = PEAK_LOW << 7;
 			} else if ( sample_count <= count_per_2pi ) {
 				fixed_value_triangle += fixed_delta_sawtooth; // Fixed Point Arithmetic (ADD)
-				temp = fixed_value_triangle >> 6; // Make Bit[7:0] UINT8
-				if ( 0x0020 & fixed_value_triangle ) temp++; // Check Fractional Part Bit[5] (0.5) to Round Off
-				if ( temp > PEAK_HIGH ) temp = PEAK_HIGH; // Saturate at Least 8-bit
+				temp = (fixed_value_triangle << 1) >> 8; // Make Bit[7:0] UINT8 (Considered of Clock Cycle)
+				if ( 0x0040 & fixed_value_triangle ) temp++; // Check Fractional Part Bit[6] (0.5) to Round Off
 				OCR0B = temp;
 			}
 		} else {
@@ -248,8 +255,8 @@ ISR(TIM0_OVF_vect) {
 				OCR0B = fixed_value_triangle;
 			} else if ( sample_count <= count_per_2pi ) {
 				fixed_value_triangle -= fixed_delta_sawtooth; // Fixed Point Arithmetic (ADD)
-				temp = fixed_value_triangle >> 6; // Make Bit[7:0] UINT8
-				if ( temp < PEAK_LOW ) temp = PEAK_LOW; // Saturate at Least 8-bit
+				temp = (fixed_value_triangle << 1) >> 8; // Make Bit[7:0] UINT8 (Considered of Clock Cycle)
+				if ( 0x0040 & fixed_value_triangle ) temp++; // Check Fractional Part Bit[6] (0.5) to Round Off
 				OCR0B = temp;
 			}
 

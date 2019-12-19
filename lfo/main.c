@@ -24,7 +24,7 @@
  * Input from PB4 (ADC2) to Calibrate Output Frequency, ADC Value 0 Means -16, ADC Value 255 Means +15
  * Note: The wave may not reach the high peak, 0xFF (255) in default,
  *       because of its low precision decimal system.
- *       Especially, the lower frequency loses the high peak, e.g., 0.125Hz reaches up to 0xEE (238).
+ *       Especially, the lower frequency loses the high peak, e.g., 0.125Hz reaches up to 0xEF (239) through Round Off.
  */
 
 #define SAMPLE_RATE (double)(F_CPU / 510 * 64) // Approx. 294.117647 Samples per Seconds
@@ -254,7 +254,7 @@ ISR(TIM0_OVF_vect) {
 			if ( sample_count == 0 ) { // Decrement
 				OCR0B = fixed_value_triangle;
 			} else if ( sample_count <= count_per_2pi ) {
-				fixed_value_triangle -= fixed_delta_sawtooth; // Fixed Point Arithmetic (ADD)
+				fixed_value_triangle -= fixed_delta_sawtooth; // Fixed Point Arithmetic (SUB)
 				temp = (fixed_value_triangle << 1) >> 8; // Make Bit[7:0] UINT8 (Considered of Clock Cycle)
 				if ( 0x0040 & fixed_value_triangle ) temp++; // Check Fractional Part Bit[6] (0.5) to Round Off
 				OCR0B = temp;

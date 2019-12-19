@@ -19,7 +19,8 @@
 
 /**
  * Output Sawtooth Wave from PB0 (OC0A)
- * Input from PB2, Start Seqeuncer If Detected Low
+ * Input from PB2 (Button 1), Start Seqeuncer If Detected Low
+ * Input from PB3 (Button 2), Start Seqeuncer If Detected Low
  * Note: The wave may not reach the high peak, 0xFF (255) in default,
  *       because of its low precision decimal system.
  */
@@ -65,17 +66,20 @@ uint16_t seqeuncer_count_last;
 /**
  * Bit[7:0]: 0-255 Tone Select
  */
-uint8_t sequencer_array[] = {
-	1,2,3,4,5,6,7,6,7,0
+uint8_t sequencer_array[2][SEQUENCER_COUNTUPTO] = {
+	{1,2,3,4,5,6,7,6,7,0},
+	{7,7,6,6,5,5,4,4,3,3}
 };
 
 int main(void) {
 
 	/* Declare and Define Local Constants and Variables */
-	uint8_t const pin_button = _BV(PINB2); // Assign PB2 as Button Input
+	uint8_t const pin_button1 = _BV(PINB2); // Assign PB2 as Button Input
+	uint8_t const pin_button2 = _BV(PINB3); // Assign PB3 as Button Input
 	uint16_t count_per_2pi_buffer = 0;
 	uint16_t fixed_delta_sawtooth_buffer = 0;
 	uint8_t sequencer_value;
+	uint8_t input_pin;
 
 	/* Initialize Global Variables */
 
@@ -101,7 +105,7 @@ int main(void) {
 	/* I/O Settings */
 
 	PORTB = 0; // All Low
-	PORTB |= _BV(PB2); // Pullup Button Input (There is No Internal Pulldown)
+	PORTB |= _BV(PB3)|_BV(PB2); // Pullup Button Input (There is No Internal Pulldown)
 	DDRB = 0; // All Input
 	DDRB |= _BV(DDB0); // Bit Value Set PB0 (OC0A)
 
@@ -123,10 +127,17 @@ int main(void) {
 	TCCR0B = _BV(CS00);
 
 	while(1) {
-		if ( ! (PINB & pin_button) ) {
+		input_pin = 0;
+		if ( ! (PINB & pin_button1) ) {
+			input_pin += 0b01;
+		}
+		if ( ! (PINB & pin_button2) ) {
+			input_pin += 0b01;
+		}
+		if ( input_pin ) {
 			if ( ! sequence_start ) sequence_start = 1;
 			if ( seqeuncer_count_update != seqeuncer_count_last ) {
-				sequencer_value = sequencer_array[(seqeuncer_count_update - 1)];
+				sequencer_value = sequencer_array[input_pin - 1][(seqeuncer_count_update - 1)];
 				/* Pentatonic Scale, A Minor and C Major, 37500 Samples per Seconds */
 				if ( sequencer_value == 7 ) {
 					count_per_2pi_buffer = 35; // C6 1046.50 Hz
@@ -183,7 +194,7 @@ int main(void) {
 					}
 					OSCCAL = osccal_default + osccal_tuning;
 				}
-				if ( seqeuncer_count_update > SEQUENCER_COUNTUPTO ) {
+				if ( seqeuncer_count_update >= SEQUENCER_COUNTUPTO ) {
 					seqeuncer_count_update = 0;
 				}
 				seqeuncer_count_last = seqeuncer_count_update;

@@ -19,8 +19,10 @@
 
 /**
  * Output Sawtooth Wave from PB0 (OC0A)
- * Input from PB2 (Button 1), Start Seqeuncer If Detected Low
- * Input from PB3 (Button 2), Start Seqeuncer If Detected Low
+ * Input from PB2 (Button 1), Start Sequencer If Detected Low
+ * Input from PB3 (Button 2), Start Sequencer If Detected Low
+ * If either Button 1 or Button 2 detects low, Sequence no.1 starts.
+ * If both Button 1 and Button 2 detect low, Sequence no.2 starts.
  * Note: The wave may not reach the high peak, 0xFF (255) in default,
  *       because of its low precision decimal system.
  */
@@ -48,8 +50,6 @@ uint16_t count_per_2pi; // Count per 2Pi Radian
 
 uint16_t fixed_value_sawtooth; // Fixed Point Arithmetic, Bit[15] Sign, Bit[14:7] UINT8, Bit[6:0] Fractional Part
 uint16_t fixed_delta_sawtooth; // Fixed Point Arithmetic, Bit[15] Sign, Bit[14:7] UINT8, Bit[6:0] Fractional Part
-uint16_t fixed_value_triangle; // Fixed Point Arithmetic, Bit[15] Sign, Bit[14:7] UINT8, Bit[6:0] Fractional Part
-uint8_t toggle_triangle;
 
 /**
  *                         PEAK_TO_PEAK
@@ -58,17 +58,16 @@ uint8_t toggle_triangle;
  */
 
 uint8_t function_start;
-uint8_t sequence_start;
 uint16_t sequencer_interval_count;
-uint16_t seqeuncer_count_update;
-uint16_t seqeuncer_count_last;
+uint16_t sequencer_count_update;
+uint16_t sequencer_count_last;
 
 /**
  * Bit[7:0]: 0-255 Tone Select
  */
 uint8_t sequencer_array[2][SEQUENCER_COUNTUPTO] = {
-	{1,2,3,4,5,6,7,6,7,0},
-	{7,7,6,6,5,5,4,4,3,3}
+	{1,3,3,4,4,5,5,5,6,7},
+	{0,1,2,2,0,3,4,4,0,5}
 };
 
 int main(void) {
@@ -90,12 +89,9 @@ int main(void) {
 	count_per_2pi = 0;
 	fixed_value_sawtooth = 0;
 	fixed_delta_sawtooth = 0;
-	fixed_value_triangle = 0;
-	toggle_triangle = 0;
-	sequence_start = 0;
 	sequencer_interval_count = 0;
-	seqeuncer_count_update = 0;
-	seqeuncer_count_last = 0;
+	sequencer_count_update = 0;
+	sequencer_count_last = 0;
 
 	/* Clock Calibration */
 
@@ -135,9 +131,9 @@ int main(void) {
 			input_pin += 0b01;
 		}
 		if ( input_pin ) {
-			if ( ! sequence_start ) sequence_start = 1;
-			if ( seqeuncer_count_update != seqeuncer_count_last ) {
-				sequencer_value = sequencer_array[input_pin - 1][(seqeuncer_count_update - 1)];
+			if ( ! sequencer_count_update || sequencer_count_update != sequencer_count_last ) {
+				if ( ! sequencer_count_update ) sequencer_count_update = 1; // If Zero, Not Starting
+				sequencer_value = sequencer_array[input_pin - 1][(sequencer_count_update - 1)];
 				/* Pentatonic Scale, A Minor and C Major, 37500 Samples per Seconds */
 				if ( sequencer_value == 7 ) {
 					count_per_2pi_buffer = 35; // C6 1046.50 Hz
@@ -176,7 +172,6 @@ int main(void) {
 					if ( count_per_2pi_buffer ) {
 						cli(); // Stop to Issue Interrupt
 						sample_count = 0;
-						toggle_triangle = 0;
 						count_per_2pi = count_per_2pi_buffer;
 						count_per_pi = count_per_2pi >> 1;
 						fixed_delta_sawtooth = fixed_delta_sawtooth_buffer;
@@ -185,33 +180,30 @@ int main(void) {
 					} else {
 						cli(); // Stop to Issue Interrupt
 						sample_count = 0;
-						toggle_triangle = 0;
 						count_per_2pi = 0;
 						count_per_pi = 0;
 						fixed_delta_sawtooth = 0;
 						function_start = 0;
 						sei(); // Start to Issue Interrupt
 					}
-					OSCCAL = osccal_default + osccal_tuning;
 				}
-				if ( seqeuncer_count_update >= SEQUENCER_COUNTUPTO ) {
-					seqeuncer_count_update = 0;
+				OSCCAL = osccal_default + osccal_tuning;
+				if ( sequencer_count_update > SEQUENCER_COUNTUPTO ) {
+					sequencer_count_update = 0;
 				}
-				seqeuncer_count_last = seqeuncer_count_update;
+				sequencer_count_last = sequencer_count_update;
 			}
 		} else {
 			cli(); // Stop to Issue Interrupt
 			sample_count = 0;
-			toggle_triangle = 0;
 			count_per_2pi = 0;
 			count_per_pi = 0;
 			fixed_delta_sawtooth = 0;
 			function_start = 0;
-			sequence_start = 0;
 			sei(); // Start to Issue Interrupt
 			sequencer_interval_count = 0;
-			seqeuncer_count_update = 0;
-			seqeuncer_count_last = 0;
+			sequencer_count_update = 0;
+			sequencer_count_last = 0;
 		}
 	}
 	return 0;
@@ -236,11 +228,11 @@ ISR(TIM0_OVF_vect) {
 	} else { // Stop Function
 		OCR0A = PEAK_LOW;
 	}
-	if ( sequence_start ) {
+	if ( sequencer_count_update ) { // If Not Zero, Sequencer Is Outstanding
 		sequencer_interval_count++;
 		if ( sequencer_interval_count >= SEQUENCER_INTERVAL ) {
 			sequencer_interval_count = 0;
-			seqeuncer_count_update++;
+			sequencer_count_update++;
 		}
 	}
 }

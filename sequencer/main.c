@@ -29,14 +29,16 @@
  *     0b11: PLay Sequence No.3
  * Note: The wave may not reach the high peak, 0xFF (255) in default,
  *       because of its low precision decimal system.
+ *       Tuning of OSCCAL changes the frequency of the clock, affecting interval of the sequence. 
  */
 
 #define SAMPLE_RATE (double)(F_CPU / 256) // 37500 Samples per Seconds
 #define PEAK_LOW 0x00
 #define PEAK_HIGH 0xFF
 #define PEAK_TO_PEAK (PEAK_HIGH - PEAK_LOW)
-#define SEQUENCER_INTERVAL 9375 // 4Hz = 0.25 Seconds
-#define SEQUENCER_COUNTUPTO 16 // 0.25 Seconds * 16
+#define SEQUENCER_INTERVAL 4687 // Approx. 8Hz = 0.125 Seconds
+#define SEQUENCER_COUNTUPTO 32 // 0.125 Seconds * 32
+#define SEQUENCER_SEQUENCENUMBER 3
 
 /* Global Variables without Initialization to Define at .bss Section and Squash .data Section */
 
@@ -59,16 +61,20 @@ uint16_t fixed_delta_sawtooth; // Fixed Point Arithmetic, Bit[15] Sign, Bit[14:7
  */
 
 uint8_t function_start;
+uint8_t sequencer_count_start;
 uint16_t sequencer_interval_count;
 uint16_t sequencer_count_update;
 
 /**
- * Bit[7:0]: 0-255 Tone Select
+ * Bit[7:5]: 0-255 Tone Select
  */
-uint8_t const sequencer_array[3][SEQUENCER_COUNTUPTO] PROGMEM = { // Array in Program Space
-	{ 1, 3, 3, 4, 4, 5, 5, 5, 6, 7, 1, 2, 3, 4, 5, 6}, // Sequence No.1
-	{ 0, 3, 3, 5, 5, 7, 7, 9, 9,10,10,10, 5, 5, 3, 3}, // Sequence No.2
-	{ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9,10, 9, 8, 7, 6, 5}  // Sequence No.3
+uint8_t const sequencer_array[SEQUENCER_SEQUENCENUMBER][SEQUENCER_COUNTUPTO] PROGMEM = { // Array in Program Space
+	{  1,  3,  3,  4,  4,  5,  5,  5,  6,  7,  7,  2,  3,  4,  3,  2,
+	   0,  1,  0,  4,  0,  5,  0,  5,  0,  7,  0,  2,  0,  4,  0,  6}, // Sequence No.1
+	{  0,  3,  3,  5,  5,  7,  7,  9,  9, 10, 10, 10,  5,  5,  3,  3,
+	   0,  1,  1,  3,  3,  5,  5,  7,  7,  8,  8,  8,  3,  3,  1,  1}, // Sequence No.2
+	{  8,238,237,236,235,234,233,232,231,232,233,234,235,236,237,238,
+	 239,240,241,242,243,244,245,246,247,246,245,244,243,242,241,240}  // Sequence No.3
 };
 
 int main(void) {
@@ -83,6 +89,7 @@ int main(void) {
 	uint8_t input_pin;
 	uint8_t osccal_default; // Calibrated Default Value of OSCCAL
 	int8_t osccal_tuning; // Tuning Value for Variable Tone
+	int8_t osccal_pitch = 0; // Pitch Value
 
 	/* Initialize Global Variables */
 
@@ -102,6 +109,7 @@ int main(void) {
 
 	/* I/O Settings */
 
+	DIDR0 = _BV(PB5)|_BV(PB4)|_BV(PB1)|_BV(PB0); // Digital Input Disable
 	PORTB = 0; // All Low
 	PORTB |= _BV(PB3)|_BV(PB2); // Pullup Button Input (There is No Internal Pulldown)
 	DDRB = 0; // All Input
@@ -133,9 +141,13 @@ int main(void) {
 			input_pin |= 0b10;
 		}
 		if ( input_pin ) {
-			if ( ! sequencer_count_update || sequencer_count_update != sequencer_count_last ) {
-				if ( ! sequencer_count_update ) sequencer_count_update = 1; // If Zero, Not Starting
-				sequencer_value = pgm_read_byte(&(sequencer_array[input_pin - 1][(sequencer_count_update - 1)]));
+			if ( ! sequencer_count_start || sequencer_count_update != sequencer_count_last ) {
+				if ( ! sequencer_count_start ) sequencer_count_start = 1; 
+				if ( sequencer_count_update >= SEQUENCER_COUNTUPTO ) {
+					sequencer_count_update = 0;
+				}
+				if ( input_pin >= SEQUENCER_SEQUENCENUMBER ) input_pin = SEQUENCER_SEQUENCENUMBER;
+				sequencer_value = pgm_read_byte(&(sequencer_array[input_pin - 1][sequencer_count_update]));
 				/* Heptatonic Scale, A Minor and C Major, 37500 Samples per Seconds */
 				if ( sequencer_value == 10 ) {
 					count_per_2pi_buffer = 35; // C6 1046.50 Hz
@@ -177,6 +189,8 @@ int main(void) {
 					count_per_2pi_buffer = 84; // A4 440.00 Hz
 					fixed_delta_sawtooth_buffer = 3<<7|0b0000100;
 					osccal_tuning = 0;
+				} else if ( sequencer_value >= 223 ) { // Only Calibration
+					osccal_pitch = sequencer_value - 239; // -16 to +16, (239 Means 0)
 				} else {
 					count_per_2pi_buffer = 0;
 					fixed_delta_sawtooth_buffer = 0;
@@ -199,10 +213,7 @@ int main(void) {
 						sei(); // Start to Issue Interrupt
 					}
 				}
-				OSCCAL = osccal_default + osccal_tuning;
-				if ( sequencer_count_update > SEQUENCER_COUNTUPTO ) {
-					sequencer_count_update = 0;
-				}
+				OSCCAL = osccal_default + osccal_tuning + osccal_pitch;
 				sequencer_count_last = sequencer_count_update;
 			}
 		} else {
@@ -212,6 +223,7 @@ int main(void) {
 			fixed_delta_sawtooth = 0;
 			function_start = 0;
 			sei(); // Start to Issue Interrupt
+			sequencer_count_start = 0;
 			sequencer_interval_count = 0;
 			sequencer_count_update = 0;
 			sequencer_count_last = 0;
@@ -239,7 +251,7 @@ ISR(TIM0_OVF_vect) {
 	} else { // Stop Function
 		OCR0A = PEAK_LOW;
 	}
-	if ( sequencer_count_update ) { // If Not Zero, Sequencer Is Outstanding
+	if ( sequencer_count_start ) { // If Not Zero, Sequencer Is Outstanding
 		sequencer_interval_count++;
 		if ( sequencer_interval_count >= SEQUENCER_INTERVAL ) {
 			sequencer_interval_count = 0;

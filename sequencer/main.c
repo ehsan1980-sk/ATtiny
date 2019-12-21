@@ -29,7 +29,7 @@
  *     0b11: PLay Sequence No.3
  * Note: The wave may not reach the high peak, 0xFF (255) in default,
  *       because of its low precision decimal system.
- *       Tuning of OSCCAL changes the frequency of the clock, affecting interval of the sequence. 
+ *       Tuning of OSCCAL changes the frequency of the clock, affecting interval of the sequence.
  */
 
 #define SAMPLE_RATE (double)(F_CPU / 256) // 37500 Samples per Seconds
@@ -37,7 +37,7 @@
 #define PEAK_HIGH 0xFF
 #define PEAK_TO_PEAK (PEAK_HIGH - PEAK_LOW)
 #define SEQUENCER_INTERVAL 4687 // Approx. 8Hz = 0.125 Seconds
-#define SEQUENCER_COUNTUPTO 32 // 0.125 Seconds * 32
+#define SEQUENCER_COUNTUPTO 64 // 0.125 Seconds * 64
 #define SEQUENCER_SEQUENCENUMBER 3
 
 /* Global Variables without Initialization to Define at .bss Section and Squash .data Section */
@@ -70,10 +70,16 @@ uint16_t sequencer_count_update;
  */
 uint8_t const sequencer_array[SEQUENCER_SEQUENCENUMBER][SEQUENCER_COUNTUPTO] PROGMEM = { // Array in Program Space
 	{  1,  3,  3,  4,  4,  5,  5,  5,  6,  7,  7,  2,  3,  4,  3,  2,
+	   0,  1,  0,  4,  0,  5,  0,  5,  0,  7,  0,  2,  0,  4,  0,  6,
+	   1,  3,  3,  4,  4,  5,  5,  5,  6,  7,  7,  2,  3,  4,  3,  2,
 	   0,  1,  0,  4,  0,  5,  0,  5,  0,  7,  0,  2,  0,  4,  0,  6}, // Sequence No.1
 	{  0,  3,  3,  5,  5,  7,  7,  9,  9, 10, 10, 10,  5,  5,  3,  3,
+	   0,  1,  1,  3,  3,  5,  5,  7,  7,  8,  8,  8,  3,  3,  1,  1,
+	   1,  1,  1,  1,  5,  5,  5,  5,  7,  7,  7,  7,  8,  8,  8,  8,
 	   0,  1,  1,  3,  3,  5,  5,  7,  7,  8,  8,  8,  3,  3,  1,  1}, // Sequence No.2
 	{  8,238,237,236,235,234,233,232,231,232,233,234,235,236,237,238,
+	 239,240,241,242,243,244,245,246,247,246,245,244,243,242,241,240,
+	   2,238,237,236,235,234,233,232,231,232,233,234,235,236,237,238,
 	 239,240,241,242,243,244,245,246,247,246,245,244,243,242,241,240}  // Sequence No.3
 };
 
@@ -88,32 +94,25 @@ int main(void) {
 	uint8_t sequencer_value;
 	uint8_t input_pin;
 	uint8_t osccal_default; // Calibrated Default Value of OSCCAL
-	int8_t osccal_tuning; // Tuning Value for Variable Tone
+	int8_t osccal_tuning = 0; // Tuning Value for Variable Tone
 	int8_t osccal_pitch = 0; // Pitch Value
 
 	/* Initialize Global Variables */
 
-	osccal_default = OSCCAL;
-	osccal_tuning = 0;
 	sample_count = 0;
-	count_per_2pi = 0;
-	fixed_value_sawtooth = 0;
-	fixed_delta_sawtooth = 0;
 	sequencer_interval_count = 0;
 	sequencer_count_update = 0;
 
 	/* Clock Calibration */
 
-	osccal_default += CALIB_OSCCAL; // Frequency Calibration for Individual Difference at VCC = 3.3V
+	osccal_default = OSCCAL + CALIB_OSCCAL; // Frequency Calibration for Individual Difference at VCC = 3.3V
 	OSCCAL = osccal_default;
 
 	/* I/O Settings */
 
 	DIDR0 = _BV(PB5)|_BV(PB4)|_BV(PB1)|_BV(PB0); // Digital Input Disable
-	PORTB = 0; // All Low
-	PORTB |= _BV(PB3)|_BV(PB2); // Pullup Button Input (There is No Internal Pulldown)
-	DDRB = 0; // All Input
-	DDRB |= _BV(DDB0); // Bit Value Set PB0 (OC0A)
+	PORTB = _BV(PB3)|_BV(PB2); // Pullup Button Input (There is No Internal Pulldown)
+	DDRB = _BV(DDB0); // Bit Value Set PB0 (OC0A)
 
 	/* Counter/Timer */
 
@@ -142,7 +141,7 @@ int main(void) {
 		}
 		if ( input_pin ) {
 			if ( ! sequencer_count_start || sequencer_count_update != sequencer_count_last ) {
-				if ( ! sequencer_count_start ) sequencer_count_start = 1; 
+				if ( ! sequencer_count_start ) sequencer_count_start = 1;
 				if ( sequencer_count_update >= SEQUENCER_COUNTUPTO ) {
 					sequencer_count_update = 0;
 				}

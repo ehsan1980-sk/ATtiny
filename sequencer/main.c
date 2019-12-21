@@ -66,7 +66,7 @@ uint16_t sequencer_interval_count;
 uint16_t sequencer_count_update;
 
 /**
- * Bit[7:5]: 0-255 Tone Select
+ * Bit[7:0]: 0-255 Tone Select
  */
 uint8_t const sequencer_array[SEQUENCER_SEQUENCENUMBER][SEQUENCER_COUNTUPTO] PROGMEM = { // Array in Program Space
 	{  1,  3,  3,  4,  4,  5,  5,  5,  6,  7,  7,  2,  3,  4,  3,  2,

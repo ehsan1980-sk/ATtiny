@@ -72,6 +72,10 @@ make install
 
 * Place programmed TinyAVR/ATtiny to your circuit.
 
+## Memos on Development
+
+* ATtiny13 has 64 bytes SRAM which enables stack (pop/push) operations. Caution that SRAM is shared by global variables and stack. Many stack operations may cause memory overflow and corrupt global variables. Arrays of constants can be stored in program space using `PROGMEM` attribute with `<avr/pgmspace.h>` library.
+
 ## Technical Notes
 
 **December 1, 2019**

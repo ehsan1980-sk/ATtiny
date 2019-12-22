@@ -43,7 +43,7 @@
 /* Global Variables without Initialization to Define at .bss Section and Squash .data Section */
 
 uint16_t sample_count; // Count per Timer/Counter0 Overflow Interrupt
-uint16_t count_per_2pi; // Count Number for 2Pi Radian to Make Wave
+uint16_t count_per_2pi; // Count Number for 2Pi Radian to Make Wave, 0xFFFF is Initial Value to Enable Interrupt
 
 /**
  *                      SAMPLE_RATE
@@ -98,10 +98,11 @@ int main(void) {
 	int8_t osccal_pitch = 0; // Pitch Value
 
 	/* Initialize Global Variables */
-
-	sample_count = 0;
+	count_per_2pi = 0xFFFF;
+	sequencer_count_start = 0;
 	sequencer_interval_count = 0;
 	sequencer_count_update = 0;
+	sequencer_count_last = 0;
 
 	/* Clock Calibration */
 
@@ -142,9 +143,7 @@ int main(void) {
 		if ( input_pin ) {
 			if ( ! sequencer_count_start || sequencer_count_update != sequencer_count_last ) {
 				if ( ! sequencer_count_start ) sequencer_count_start = 1;
-				if ( sequencer_count_update >= SEQUENCER_COUNTUPTO ) {
-					sequencer_count_update = 0;
-				}
+				if ( sequencer_count_update >= SEQUENCER_COUNTUPTO ) sequencer_count_update = 0;
 				if ( input_pin >= SEQUENCER_SEQUENCENUMBER ) input_pin = SEQUENCER_SEQUENCENUMBER;
 				sequencer_value = pgm_read_byte(&(sequencer_array[input_pin - 1][sequencer_count_update]));
 				/* Heptatonic Scale, A Minor and C Major, 37500 Samples per Seconds */
@@ -205,9 +204,7 @@ int main(void) {
 						sei(); // Start to Issue Interrupt
 					} else {
 						cli(); // Stop to Issue Interrupt
-						sample_count = 0;
 						count_per_2pi = 0;
-						fixed_delta_sawtooth = 0;
 						function_start = 0;
 						sei(); // Start to Issue Interrupt
 					}
@@ -216,16 +213,16 @@ int main(void) {
 				sequencer_count_last = sequencer_count_update;
 			}
 		} else {
-			cli(); // Stop to Issue Interrupt
-			sample_count = 0;
-			count_per_2pi = 0;
-			fixed_delta_sawtooth = 0;
-			function_start = 0;
-			sei(); // Start to Issue Interrupt
-			sequencer_count_start = 0;
-			sequencer_interval_count = 0;
-			sequencer_count_update = 0;
-			sequencer_count_last = 0;
+			if ( SREG & _BV(SREG_I) ) { // If Global Interrupt Enable Flag Is Set
+				cli();
+				count_per_2pi = 0xFFFF;
+				function_start = 0;
+				sequencer_count_start = 0;
+				sequencer_interval_count = 0;
+				sequencer_count_update = 0;
+				sequencer_count_last = 0;
+				OCR0A = PEAK_LOW;
+			}
 		}
 	}
 	return 0;
@@ -247,8 +244,6 @@ ISR(TIM0_OVF_vect) {
 		}
 		sample_count++;
 		if ( sample_count > count_per_2pi ) sample_count = 0;
-	} else { // Stop Function
-		OCR0A = PEAK_LOW;
 	}
 	if ( sequencer_count_start ) { // If Not Zero, Sequencer Is Outstanding
 		sequencer_interval_count++;

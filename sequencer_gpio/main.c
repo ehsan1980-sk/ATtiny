@@ -74,8 +74,10 @@ int main(void) {
 
 	/* Initialize Global Variables */
 
+	sequencer_count_start = 0;
 	sequencer_interval_count = 0;
 	sequencer_count_update = 0;
+	sequencer_count_last = 0;
 
 	/* Clock Calibration */
 
@@ -102,8 +104,6 @@ int main(void) {
 	// Start Counter with I/O-Clock 9.6MHz / ( 256 * 64 ) = 585.9375Hz
 	TCCR0B = _BV(CS00)|_BV(CS01);
 
-	sei(); // Start to Issue Interrupt
-
 	while(1) {
 		input_pin = 0;
 		if ( ! (PINB & pin_button1) ) {
@@ -114,10 +114,7 @@ int main(void) {
 		}
 		if ( input_pin ) {
 			if ( ! sequencer_count_start || sequencer_count_update != sequencer_count_last ) {
-				if ( ! sequencer_count_start ) sequencer_count_start = 1;
-				if ( sequencer_count_update >= SEQUENCER_COUNTUPTO ) {
-					sequencer_count_update = 0;
-				}
+				if ( sequencer_count_update >= SEQUENCER_COUNTUPTO ) sequencer_count_update = 0;
 				if ( input_pin >= SEQUENCER_SEQUENCENUMBER ) input_pin = SEQUENCER_SEQUENCENUMBER;
 				sequencer_value = pgm_read_byte(&(sequencer_array[input_pin - 1][sequencer_count_update]));
 				sequencer_output = PORTB;
@@ -133,15 +130,23 @@ int main(void) {
 				}
 				PORTB = sequencer_output;
 				sequencer_count_last = sequencer_count_update;
+				if ( ! sequencer_count_start ) {
+					TCNT0 = 0; // Counter Reset
+					sequencer_count_start = 1;
+					sei(); // Start to Issue Interrupt
+				}
 			}
 		} else {
-			sequencer_output = PORTB;
-			sequencer_output &= ~(_BV(PB1)|_BV(PB0));
-			PORTB = sequencer_output;
-			sequencer_count_start = 0;
-			sequencer_interval_count = 0;
-			sequencer_count_update = 0;
-			sequencer_count_last = 0;
+			if ( SREG & _BV(SREG_I) ) { // If Global Interrupt Enable Flag Is Set
+				cli();
+				sequencer_count_start = 0;
+				sequencer_interval_count = 0;
+				sequencer_count_update = 0;
+				sequencer_count_last = 0;
+				sequencer_output = PORTB;
+				sequencer_output &= ~(_BV(PB1)|_BV(PB0));
+				PORTB = sequencer_output;
+			}
 		}
 	}
 	return 0;

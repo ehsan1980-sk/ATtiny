@@ -38,7 +38,7 @@
 #define PEAK_TO_PEAK (PEAK_HIGH - PEAK_LOW)
 #define SEQUENCER_INTERVAL 4687 // Approx. 8Hz = 0.125 Seconds
 #define SEQUENCER_COUNTUPTO 64 // 0.125 Seconds * 64
-#define SEQUENCER_SEQUENCENUMBER 3
+#define SEQUENCER_SEQUENCENUMBER 3 // Miximum Number of Sequence
 
 /* Global Variables without Initialization to Define at .bss Section and Squash .data Section */
 
@@ -69,13 +69,13 @@ uint16_t sequencer_count_update;
  * Bit[7:0]: 0-255 Tone Select
  */
 uint8_t const sequencer_array[SEQUENCER_SEQUENCENUMBER][SEQUENCER_COUNTUPTO] PROGMEM = { // Array in Program Space
-	{  1,  3,  3,  4,  4,  5,  5,  5,  6,  7,  7,  2,  3,  4,  3,  2,
-	   0,  1,  0,  4,  0,  5,  0,  5,  0,  7,  0,  2,  0,  4,  0,  6,
-	   1,  3,  3,  4,  4,  5,  5,  5,  6,  7,  7,  2,  3,  4,  3,  2,
-	   0,  1,  0,  4,  0,  5,  0,  5,  0,  7,  0,  2,  0,  4,  0,  6}, // Sequence No.1
+	{  5,  0,  5,  0,  5,  0,  5,  0,  5,  7,  3,  4,  5,  5,  0,  5,
+	   6,  0,  6,  0,  6,  5,  0,  5,  5,  4,  4,  5,  4,  4,  7,  7,
+	   5,  0,  5,  0,  5,  0,  5,  0,  5,  7,  3,  4,  5,  5,  0,  5,
+	   6,  0,  6,  0,  6,  5,  0,  5,  7,  7,  6,  4,  3,  3,  0,  3}, // Sequence No.1 (Jingle Bells)
 	{  0,  3,  3,  5,  5,  7,  7,  9,  9, 10, 10, 10,  5,  5,  3,  3,
 	   0,  1,  1,  3,  3,  5,  5,  7,  7,  8,  8,  8,  3,  3,  1,  1,
-	   1,  1,  1,  1,  5,  5,  5,  5,  7,  7,  7,  7,  8,  8,  8,  8,
+	   0,  1,  1,  1,  5,  5,  5,  5,  7,  7,  7,  7,  8,  8,  8,  8,
 	   0,  1,  1,  3,  3,  5,  5,  7,  7,  8,  8,  8,  3,  3,  1,  1}, // Sequence No.2
 	{  8,238,237,236,235,234,233,232,231,232,233,234,235,236,237,238,
 	 239,240,241,242,243,244,245,246,247,246,245,244,243,242,241,240,

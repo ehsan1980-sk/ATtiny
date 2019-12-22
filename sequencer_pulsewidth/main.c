@@ -149,7 +149,7 @@ int main(void) {
 			}
 		} else {
 			if ( SREG & _BV(SREG_I) ) { // If Global Interrupt Enable Flag Is Set
-				cli();
+				cli(); // Stop Interrupt
 				sequencer_count_start = 0;
 				sequencer_interval_count = 0;
 				sequencer_count_update = 0;

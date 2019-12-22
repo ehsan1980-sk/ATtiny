@@ -74,6 +74,10 @@ int main(void) {
 	int8_t osccal_pitch = 0; // Pitch Value from ADC2
 	int8_t osccal_pitch_buffer;
 
+	/* Initialize Global Variables */
+
+	count_per_2pi = 0;
+
 	/* Clock Calibration */
 
 	osccal_default = OSCCAL + CALIB_OSCCAL; // Frequency Calibration for Individual Difference at VCC = 3.3V
@@ -115,6 +119,9 @@ int main(void) {
 
 	// Start Counter with I/O-Clock 9.6MHz / ( 1 * 256 ) = 37500Hz
 	TCCR0B = _BV(CS00);
+
+	// Start to Issue Interrupt
+	sei();
 
 	while(1) {
 		ADMUX |= select_adc_channel_1;
@@ -170,12 +177,11 @@ int main(void) {
 					function_start = 1;
 					sei(); // Start to Issue Interrupt
 				} else {
-					if ( SREG & _BV(SREG_I) ) { // If Global Interrupt Enable Flag Is Set
-						cli();  // Stop to Issue Interrupt
-						function_start = 0;
-						OCR0A = PEAK_LOW;
-						OCR0B = PEAK_LOW;
-					}
+					cli();  // Stop to Issue Interrupt
+					function_start = 0;
+					OCR0A = PEAK_LOW;
+					OCR0B = PEAK_LOW;
+					sei(); // Start to Issue Interrupt
 				}
 				OSCCAL = osccal_default + osccal_tuning + osccal_pitch;
 			}

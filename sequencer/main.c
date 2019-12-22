@@ -98,6 +98,7 @@ int main(void) {
 	int8_t osccal_pitch = 0; // Pitch Value
 
 	/* Initialize Global Variables */
+
 	count_per_2pi = 0xFFFF;
 	sequencer_count_start = 0;
 	sequencer_interval_count = 0;
@@ -131,6 +132,9 @@ int main(void) {
 
 	// Start Counter with I/O-Clock 9.6MHz / ( 1 * 256 ) = 37500Hz
 	TCCR0B = _BV(CS00);
+
+	// Start to Issue Interrupt
+	sei();
 
 	while(1) {
 		input_pin = 0;
@@ -213,7 +217,7 @@ int main(void) {
 				sequencer_count_last = sequencer_count_update;
 			}
 		} else {
-			if ( SREG & _BV(SREG_I) ) { // If Global Interrupt Enable Flag Is Set
+			if ( sequencer_count_start ) {
 				cli();
 				count_per_2pi = 0xFFFF;
 				function_start = 0;
@@ -222,6 +226,7 @@ int main(void) {
 				sequencer_count_update = 0;
 				sequencer_count_last = 0;
 				OCR0A = PEAK_LOW;
+				sei();
 			}
 		}
 	}

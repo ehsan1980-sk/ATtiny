@@ -36,7 +36,7 @@
 #define SAMPLE_RATE (double)(F_CPU / 510 * 64) // Approx. 294.117647 Samples per Seconds
 #define SEQUENCER_INTERVAL 30 // Approx. 8Hz = 0.102 Seconds
 #define SEQUENCER_COUNTUPTO 64 // 0.102 Seconds * 64
-#define SEQUENCER_SEQUENCENUMBER 4 // Miximum Number of Sequence
+#define SEQUENCER_SEQUENCENUMBER 4 // Maximum Number of Sequence
 
 /* Global Variables without Initialization to Define at .bss Section and Squash .data Section */
 

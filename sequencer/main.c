@@ -38,7 +38,7 @@
 #define PEAK_TO_PEAK (PEAK_HIGH - PEAK_LOW)
 #define SEQUENCER_INTERVAL 4687 // Approx. 8Hz = 0.125 Seconds
 #define SEQUENCER_COUNTUPTO 64 // 0.125 Seconds * 64
-#define SEQUENCER_SEQUENCENUMBER 3 // Miximum Number of Sequence
+#define SEQUENCER_SEQUENCENUMBER 3 // Maximum Number of Sequence
 
 /* Global Variables without Initialization to Define at .bss Section and Squash .data Section */
 

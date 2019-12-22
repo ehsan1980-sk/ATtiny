@@ -193,7 +193,7 @@ int main(void) {
 					osccal_tuning = 0;
 				} else if ( sequencer_value == 1 ) {
 					count_per_2pi_buffer = 95; // G4 392.00 Hz
-					fixed_delta_sawtooth_buffer = 3<<7|0b0000100;
+					fixed_delta_sawtooth_buffer = 2<<7|0b1010111;
 					osccal_tuning = 1;
 				} else if ( sequencer_value >= 223 ) { // Only Calibration
 					osccal_pitch = sequencer_value - 239; // -16 to +16, (239 Means 0)

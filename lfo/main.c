@@ -178,7 +178,7 @@ int main(void) {
 					function_start = 1;
 					sei(); // Start to Issue Interrupt
 				} else {
-					cli();  // Stop to Issue Interrupt
+					cli(); // Stop to Issue Interrupt
 					function_start = 0;
 					OCR0A = PEAK_LOW;
 					OCR0B = PEAK_LOW;

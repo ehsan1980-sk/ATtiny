@@ -16,18 +16,33 @@
 #include <util/delay.h>
 #include <util/delay_basic.h>
 
+#define CALIB_OSCCAL 0x03 // Frequency Calibration for Individual Difference at VCC = 3.3V
+
 /**
- * Send 12-bit 2 Channels as Follows (ADC is 10-bit Resolution)
- * First Byte: Bit[7] Always High, Bit[6:5] Channel Number, Bit[4:0] Most Significant 5 Bits
- * Second Byte: Bit[7] Always Low, Bit[6:0] Least Significant 7 Bits
+ * Software UART Tx from PB3
+ * Input from PB2 (ADC1)
+ * Input from PB4 (ADC2)
+ * Note: Send 12-bit Data from Software UART Tx
+ *       First Byte: Bit[7] Always High, Bit[6:5] Channel Number, Bit[4:0] Most Significant 5 Bits
+ *       Second Byte: Bit[7] Always Low, Bit[6:0] Least Significant 7 Bits
+ *       ADC is 10-bit resolution.
  */
+
+/* Declare Function and Global Variables about Software UART */
 
 void software_uart_init( uint8_t portb_pin_number_for_tx );
 void software_uart_print_38400( char* string, uint16_t length, uint8_t portb_pin_number_for_tx );
 void software_uart_tx_38400( uint8_t character, uint8_t portb_pin_number_for_tx );
 uint8_t software_uart_tx_pin;
 
+/* Global Variables without Initialization to Define at .bss Section and Squash .data Section */
+
+uint8_t osccal_default; // Calibrated Default Value of OSCCAL
+
 int main(void) {
+
+	/* Declare and Define Local Constants and Variables */
+
 	uint8_t const select_adc_channel_1 = _BV(MUX0); // ADC1 (PB2)
 	uint8_t const select_adc_channel_2 = _BV(MUX1); // ADC2 (PB4)
 	uint8_t const clear_adc_channel = ~(_BV(MUX1)|_BV(MUX0));
@@ -37,12 +52,25 @@ int main(void) {
 	uint8_t value_adc_channel_2_low; // Bit[7:6] Is ADC[1:0]
 	uint8_t value_adc_channel_2_high; // Bit[7:0] Is ADC[9:2]
 
+	/* Initialize Global Variables */
+
+	osccal_default = OSCCAL;
+
+	/* Clock Calibration */
+
+	osccal_default += CALIB_OSCCAL;
+	OSCCAL = osccal_default;
+
+	/* I/O Settings */
+
 	PORTB = 0; // All Low
 	DDRB = 0; // All Input
 	// For Noise Reduction of ADC, Disable All Digital Input Buffers
 	DIDR0 = _BV(ADC0D)|_BV(ADC2D)|_BV(ADC3D)|_BV(ADC1D)|_BV(AIN1D)|_BV(AIN0D);
 
 	software_uart_init( 3 );
+
+	/* ADC */
 
 	// Set ADC, Vcc as Reference, ADLAR
 	ADMUX = _BV(ADLAR);

@@ -151,17 +151,17 @@ int main(void) {
 		}
 		if ( input_pin ) {
 			if ( ! sequencer_count_start || sequencer_count_update != sequencer_count_last ) {
+				if ( sequencer_count_update >= SEQUENCER_COUNTUPTO ) sequencer_count_update = 0;
+				sequencer_count_last = sequencer_count_update;
 				if ( ! sequencer_count_start ) {
 					TCNT0 = 0; // Counter Reset
 					TIFR0 |= _BV(TOV0); // Clear Set Timer/Counter0 Overflow Flag by Logic One
 					sequencer_count_start = 1;
 					sei(); // Start to Issue Interrupt
 				}
-				if ( sequencer_count_update >= SEQUENCER_COUNTUPTO ) sequencer_count_update = 0;
 				if ( input_pin >= SEQUENCER_SEQUENCENUMBER ) input_pin = SEQUENCER_SEQUENCENUMBER;
-				OCR0A = pgm_read_byte(&(sequencer_array_a[input_pin - 1][sequencer_count_update]));
-				OCR0B = pgm_read_byte(&(sequencer_array_b[input_pin - 1][sequencer_count_update]));
-				sequencer_count_last = sequencer_count_update;
+				OCR0A = pgm_read_byte(&(sequencer_array_a[input_pin - 1][sequencer_count_last]));
+				OCR0B = pgm_read_byte(&(sequencer_array_b[input_pin - 1][sequencer_count_last]));
 			}
 		} else {
 			if ( SREG & _BV(SREG_I) ) { // If Global Interrupt Enable Flag Is Set

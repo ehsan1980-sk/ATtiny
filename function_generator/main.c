@@ -77,6 +77,7 @@ int main(void) {
 	/* Initialize Global Variables */
 
 	count_per_2pi = 0;
+	function_start = 0;
 
 	/* Clock Calibration */
 
@@ -178,6 +179,7 @@ int main(void) {
 					sei(); // Start to Issue Interrupt
 				} else {
 					cli(); // Stop to Issue Interrupt
+					count_per_2pi = 0;
 					function_start = 0;
 					OCR0A = PEAK_LOW;
 					OCR0B = PEAK_LOW;

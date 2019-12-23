@@ -43,7 +43,7 @@
 /* Global Variables without Initialization to Define at .bss Section and Squash .data Section */
 
 uint16_t sample_count; // Count per Timer/Counter0 Overflow Interrupt
-uint16_t count_per_2pi; // Count Number for 2Pi Radian to Make Wave, 0xFFFF is Initial Value to Enable Interrupt
+uint16_t count_per_2pi; // Count Number for 2Pi Radian to Make Wave
 
 /**
  *                      SAMPLE_RATE
@@ -99,7 +99,8 @@ int main(void) {
 
 	/* Initialize Global Variables */
 
-	count_per_2pi = 0xFFFF;
+	count_per_2pi = 0;
+	function_start = 0;
 	sequencer_count_start = 0;
 	sequencer_interval_count = 0;
 	sequencer_count_update = 0;
@@ -146,10 +147,11 @@ int main(void) {
 		}
 		if ( input_pin ) {
 			if ( ! sequencer_count_start || sequencer_count_update != sequencer_count_last ) {
-				if ( ! sequencer_count_start ) sequencer_count_start = 1;
 				if ( sequencer_count_update >= SEQUENCER_COUNTUPTO ) sequencer_count_update = 0;
+				sequencer_count_last = sequencer_count_update;
+				if ( ! sequencer_count_start ) sequencer_count_start = 1;
 				if ( input_pin >= SEQUENCER_SEQUENCENUMBER ) input_pin = SEQUENCER_SEQUENCENUMBER;
-				sequencer_value = pgm_read_byte(&(sequencer_array[input_pin - 1][sequencer_count_update]));
+				sequencer_value = pgm_read_byte(&(sequencer_array[input_pin - 1][sequencer_count_last]));
 				/* Heptatonic Scale, G4 to C6, 37500 Samples per Seconds */
 				if ( sequencer_value == 11 ) {
 					count_per_2pi_buffer = 35; // C6 1046.50 Hz
@@ -214,16 +216,16 @@ int main(void) {
 						cli(); // Stop to Issue Interrupt
 						count_per_2pi = 0;
 						function_start = 0;
+						OCR0A = PEAK_LOW;
 						sei(); // Start to Issue Interrupt
 					}
 				}
 				OSCCAL = osccal_default + osccal_tuning + osccal_pitch;
-				sequencer_count_last = sequencer_count_update;
 			}
 		} else {
 			if ( sequencer_count_start ) {
 				cli();
-				count_per_2pi = 0xFFFF;
+				count_per_2pi = 0;
 				function_start = 0;
 				sequencer_count_start = 0;
 				sequencer_interval_count = 0;

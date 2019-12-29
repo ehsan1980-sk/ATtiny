@@ -76,6 +76,21 @@ make install
 
 * ATtiny13 has 64 bytes SRAM which enables stack (pop/push) operations. Caution that SRAM is shared by global variables and stack. Many stack operations may cause memory overflow and corrupt global variables. Arrays of constants can be stored in program space using `PROGMEM` attribute with `<avr/pgmspace.h>` library.
 
+## Sequencer, A Music Box
+
+* Sequencer is a music box. Note that Sequencer GPIO or Sequencer Pulse-width which are aiming to light decorations mainly (Sequencer Pulse-width can be modified as a Voice Box through changing to high sampling rate, even though it needs more SRAM just like in ATmega).
+
+* Sequencer has alternative versions such as "main.c.jinglebells".
+
+```bash
+cd ATtiny/sequencer
+# Change Original Version to Alternative Version
+mv main.c main.c.origin
+cp main.c.jinglebells main.c
+```
+
+* Sequencer emits saw tooth wave; because in the ideal behavior, the wave can be transformed to 90 degrees phase shifted sine wave through omitting all harmonics. Making square wave is easy; however in my experience, it often has noise like resonance after rising or falling edge, causing losses of electric power.
+
 ## Technical Notes
 
 **December 1, 2019**

@@ -89,7 +89,7 @@ mv main.c main.c.origin
 cp main.c.jinglebells main.c
 ```
 
-* Sequencer emits saw tooth wave; because in the ideal behavior, the wave can be transformed to 90 degrees phase shifted sine wave through omitting all harmonics. Making square wave is easy; however in my experience, it often has noise like resonance after rising or falling edge, causing losses of electric power.
+* Sequencer emits 90 degrees phase shifted saw tooth wave; because in the ideal behavior, the wave can be transformed to sine wave through omitting all harmonics. Making square wave is easy; however in my experience, it often has noise like resonance after rising or falling edge, causing losses of electric power.
 
 ## Technical Notes
 

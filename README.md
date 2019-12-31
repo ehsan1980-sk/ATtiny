@@ -78,7 +78,7 @@ make install
 
 ## Sequencer, A Music Box
 
-* Sequencer is a music box. Note that Sequencer GPIO or Sequencer Pulse-width which are aiming to light decorations mainly (Sequencer Pulse-width can be modified as a Voice Box through changing to high sampling rate, even though it needs more SRAM just like in ATmega).
+* Sequencer is a music box. Note that Sequencer GPIO or Sequencer Pulse-width which are aiming to light decorations mainly (Sequencer Pulse-width can be modified as a Voice Box through changing to high sampling rate, even though it needs more SRAM and program space just like in ATmega).
 
 * Sequencer has alternative versions such as "main.c.jinglebells".
 
@@ -87,9 +87,11 @@ cd ATtiny/sequencer
 # Change Original Version to Alternative Version
 mv main.c main.c.origin
 cp main.c.jinglebells main.c
+# Check Difference between Original Version and Alternative Version
+git diff main.c
 ```
 
-* Sequencer emits 90 degrees phase shifted saw tooth wave; because in the ideal behavior, the wave can be transformed to sine wave through omitting all harmonics. Making square wave is easy; however in my experience, it often has noise like resonance after rising or falling edge, causing losses of electric power.
+* Sequencer emits 180 degrees phase shifted saw tooth wave; because in the ideal behavior, the wave can be transformed to sine wave through omitting all harmonics. Making square wave is easy; however in my experience, it often has noise like resonance after rising or falling edge, causing losses of electric power.
 
 ## Technical Notes
 

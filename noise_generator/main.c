@@ -15,7 +15,7 @@
 #include <util/delay_basic.h>
 
 #define CALIB_OSCCAL 0x03 // Frequency Calibration for Individual Difference at VCC = 3.3V
-#define NOISE_DELAY_DIVIDEND 30000 // To Calculate Delay Time in Microseconds to Generate Next Random Value
+#define NOISE_DELAY_DIVIDEND 30000 // To Calculate Delay Time to Generate Next Random Value
 #define RANDOM_INIT 0xFFFF // Initial Value to Making Random Value, Must Be Non-zero
 
 /**

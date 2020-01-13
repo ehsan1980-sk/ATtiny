@@ -15,7 +15,7 @@
 #include <util/delay_basic.h>
 
 #define CALIB_OSCCAL 0x03 // Frequency Calibration for Individual Difference at VCC = 3.3V
-#define NOISE_DELAY_SLOWEST 32768 // Delay Time to Generate Next Random Value in Microseconds for Noise Type 2
+#define NOISE_DELAY_DIVIDEND 30000 // To Calculate Delay Time in Microseconds to Generate Next Random Value
 #define RANDOM_INIT 0xFFFF // Initial Value to Making Random Value, Must Be Non-zero
 
 /**
@@ -26,7 +26,7 @@
  * Input from PB4 (Bit[3]), Set by Detecting Low
  * Bit[2:0]:
  *     0b0000: Noise Off and High-Z State
- *     0b0001: Noise Off
+ *     0b0001: Noise Type 1 (Slowest)
  *     ...
  *     0b1111: Noise Type 15 (Fastest)
  */
@@ -87,7 +87,7 @@ int main(void) {
 		if ( ! (PINB & pin_button4) ) {
 			input_pin |= 0b1000;
 		}
-		max_count_delay = NOISE_DELAY_SLOWEST >> input_pin;
+		max_count_delay = NOISE_DELAY_DIVIDEND >> input_pin;
 		if ( input_pin ) { // Output Noise
 			if ( count_delay > max_count_delay ) {
 				srand(random_value - (TCNT0<<8|TCNT0)); // uint16_t

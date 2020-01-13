@@ -91,7 +91,7 @@ cp main.c.jinglebells main.c
 git diff main.c
 ```
 
-* Sequencer emits 180 degrees phase shifted saw tooth wave; because in the ideal behavior, the wave can be transformed to sine wave through omitting all harmonics. Making square wave is easy; however in my experience, it often has noise like resonance after rising or falling edge, causing losses of electric power.
+* Sequencer emits 180 degrees phase shifted saw tooth wave; because in the ideal behavior, the wave can be transformed to sine wave through omitting all harmonics. Making square wave is easy; however in my experience, it often has noise like resonance after rising or falling edge, causing losses of electric power. Square/pulse wave can be made by a comparator inputted saw tooth wave.
 
 ## Technical Notes
 

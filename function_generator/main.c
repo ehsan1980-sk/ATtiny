@@ -54,6 +54,7 @@ uint8_t toggle_triangle;
  */
 
 uint8_t function_start;
+volatile uint8_t wave_sync; // Sync with Process in ISR
 
 int main(void) {
 
@@ -78,6 +79,7 @@ int main(void) {
 
 	count_per_2pi = 0;
 	function_start = 0;
+	wave_sync = 0;
 
 	/* Clock Calibration */
 
@@ -125,85 +127,87 @@ int main(void) {
 	sei();
 
 	while(1) {
-		ADMUX |= select_adc_channel_1;
-		ADCSRA |= start_adc;
-		while( ADCSRA & start_adc );
-		ADMUX &= clear_adc_channel;
-		value_adc_channel_1_high_buffer = ADCH; // ADC[9:0] Will Be Updated After High Bits Are Read
-		if ( value_adc_channel_1_high_buffer != value_adc_channel_1_high ) {
-			value_adc_channel_1_high = value_adc_channel_1_high_buffer;
-			/* Pentatonic Scale, A Minor and C Major, 37500 Samples per Seconds */
-			if ( value_adc_channel_1_high >= 224 ) {
-				count_per_2pi_buffer = 35; // C6 1046.50 Hz
-				fixed_delta_sawtooth_buffer = 7<<7|0b0100100;
-				osccal_tuning = 1;
-			} else if ( value_adc_channel_1_high >= 192 ) {
-				count_per_2pi_buffer = 41; // A5 880.00 Hz
-				fixed_delta_sawtooth_buffer = 6<<7|0b0011100;
-				osccal_tuning = -1;
-			} else if ( value_adc_channel_1_high >= 160 ) {
-				count_per_2pi_buffer = 47; // G5 783.99 Hz
-				fixed_delta_sawtooth_buffer = 5<<7|0b0110110;
-				osccal_tuning = 1;
-			} else if ( value_adc_channel_1_high >= 128 ) {
-				count_per_2pi_buffer = 56; // E 659.26
-				fixed_delta_sawtooth_buffer = 4<<7|0b1000110;
-				osccal_tuning = 1;
-			} else if ( value_adc_channel_1_high >= 96 ) {
-				count_per_2pi_buffer = 63; // D5 587.33 Hz
-				fixed_delta_sawtooth_buffer = 4<<7|0b0000110;
-				osccal_tuning = 1;
-			} else if ( value_adc_channel_1_high >= 64 ) {
-				count_per_2pi_buffer = 70; // C5 523.25 Hz
-				fixed_delta_sawtooth_buffer = 3<<7|0b1010010;
-				osccal_tuning = 0;
-			} else if ( value_adc_channel_1_high >= 32 ) {
-				count_per_2pi_buffer = 84; // A4 440.00 Hz
-				fixed_delta_sawtooth_buffer = 3<<7|0b0000100;
-				osccal_tuning = 0;
-			} else { // ADC Value < 32
-				count_per_2pi_buffer = 0;
-				fixed_delta_sawtooth_buffer = 0;
-				osccal_tuning = 0;
-			}
-			if ( count_per_2pi_buffer != count_per_2pi ) {
-				if ( count_per_2pi_buffer ) {
-					// Fixed Point Arithmetic (DIV), LSL7 to Dividend, Needed UINT32
-					//fixed_delta_sawtooth_buffer = ((PEAK_TO_PEAK << 7) << 7) / (count_per_2pi_buffer << 7);
-					cli(); // Stop to Issue Interrupt
-					sample_count = 0;
-					toggle_triangle = 0;
-					count_per_2pi = count_per_2pi_buffer;
-					fixed_delta_sawtooth = fixed_delta_sawtooth_buffer;
-					function_start = 1;
-					sei(); // Start to Issue Interrupt
-				} else {
-					cli(); // Stop to Issue Interrupt
-					count_per_2pi = 0;
-					function_start = 0;
-					OCR0A = PEAK_LOW;
-					OCR0B = PEAK_LOW;
-					sei(); // Start to Issue Interrupt
+		if ( wave_sync ) {
+			ADMUX |= select_adc_channel_1;
+			ADCSRA |= start_adc;
+			while( ADCSRA & start_adc );
+			ADMUX &= clear_adc_channel;
+			value_adc_channel_1_high_buffer = ADCH; // ADC[9:0] Will Be Updated After High Bits Are Read
+			if ( value_adc_channel_1_high_buffer != value_adc_channel_1_high ) {
+				value_adc_channel_1_high = value_adc_channel_1_high_buffer;
+				/* Pentatonic Scale, A Minor and C Major, 37500 Samples per Seconds */
+				if ( value_adc_channel_1_high >= 224 ) {
+					count_per_2pi_buffer = 35; // C6 1046.50 Hz
+					fixed_delta_sawtooth_buffer = 7<<7|0b0100100;
+					osccal_tuning = 1;
+				} else if ( value_adc_channel_1_high >= 192 ) {
+					count_per_2pi_buffer = 41; // A5 880.00 Hz
+					fixed_delta_sawtooth_buffer = 6<<7|0b0011100;
+					osccal_tuning = -1;
+				} else if ( value_adc_channel_1_high >= 160 ) {
+					count_per_2pi_buffer = 47; // G5 783.99 Hz
+					fixed_delta_sawtooth_buffer = 5<<7|0b0110110;
+					osccal_tuning = 1;
+				} else if ( value_adc_channel_1_high >= 128 ) {
+					count_per_2pi_buffer = 56; // E 659.26
+					fixed_delta_sawtooth_buffer = 4<<7|0b1000110;
+					osccal_tuning = 1;
+				} else if ( value_adc_channel_1_high >= 96 ) {
+					count_per_2pi_buffer = 63; // D5 587.33 Hz
+					fixed_delta_sawtooth_buffer = 4<<7|0b0000110;
+					osccal_tuning = 1;
+				} else if ( value_adc_channel_1_high >= 64 ) {
+					count_per_2pi_buffer = 70; // C5 523.25 Hz
+					fixed_delta_sawtooth_buffer = 3<<7|0b1010010;
+					osccal_tuning = 0;
+				} else if ( value_adc_channel_1_high >= 32 ) {
+					count_per_2pi_buffer = 84; // A4 440.00 Hz
+					fixed_delta_sawtooth_buffer = 3<<7|0b0000100;
+					osccal_tuning = 0;
+				} else { // ADC Value < 32
+					count_per_2pi_buffer = 0;
+					fixed_delta_sawtooth_buffer = 0;
+					osccal_tuning = 0;
 				}
-				OSCCAL = osccal_default + osccal_tuning + osccal_pitch;
+				if ( count_per_2pi_buffer != count_per_2pi ) {
+					if ( count_per_2pi_buffer ) {
+						// Fixed Point Arithmetic (DIV), LSL7 to Dividend, Needed UINT32
+						//fixed_delta_sawtooth_buffer = ((PEAK_TO_PEAK << 7) << 7) / (count_per_2pi_buffer << 7);
+						cli(); // Stop to Issue Interrupt
+						sample_count = 0;
+						toggle_triangle = 0;
+						count_per_2pi = count_per_2pi_buffer;
+						fixed_delta_sawtooth = fixed_delta_sawtooth_buffer;
+						function_start = 1;
+						sei(); // Start to Issue Interrupt
+					} else {
+						cli(); // Stop to Issue Interrupt
+						count_per_2pi = 0;
+						function_start = 0;
+						OCR0A = PEAK_LOW;
+						OCR0B = PEAK_LOW;
+						sei(); // Start to Issue Interrupt
+					}
+					OSCCAL = osccal_default + osccal_tuning + osccal_pitch;
+				}
 			}
-		}
 
-		ADMUX |= select_adc_channel_2;
-		ADCSRA |= start_adc;
-		while( ADCSRA & start_adc );
-		ADMUX &= clear_adc_channel;
-		value_adc_channel_2_high_buffer = ADCH; // ADC[9:0] Will Be Updated After High Bits Are Read
-		if ( value_adc_channel_2_high_buffer != value_adc_channel_2_high ) {
-			value_adc_channel_2_high = value_adc_channel_2_high_buffer;
-			// Convert (0)-(255) to (-128)-(127) by EOR with 0x80, Arithmetic Logical Shift Right for Range (-16)-(15)
-			osccal_pitch_buffer = ((int8_t)(0x80^(value_adc_channel_2_high)) >> 3);
-			if ( osccal_pitch_buffer !=  osccal_pitch ) {
-				osccal_pitch = osccal_pitch_buffer;
-				OSCCAL = osccal_default + osccal_tuning + osccal_pitch;
+			ADMUX |= select_adc_channel_2;
+			ADCSRA |= start_adc;
+			while( ADCSRA & start_adc );
+			ADMUX &= clear_adc_channel;
+			value_adc_channel_2_high_buffer = ADCH; // ADC[9:0] Will Be Updated After High Bits Are Read
+			if ( value_adc_channel_2_high_buffer != value_adc_channel_2_high ) {
+				value_adc_channel_2_high = value_adc_channel_2_high_buffer;
+				// Convert (0)-(255) to (-128)-(127) by EOR with 0x80, Arithmetic Logical Shift Right for Range (-16)-(15)
+				osccal_pitch_buffer = ((int8_t)(0x80^(value_adc_channel_2_high)) >> 3);
+				if ( osccal_pitch_buffer !=  osccal_pitch ) {
+					osccal_pitch = osccal_pitch_buffer;
+					OSCCAL = osccal_default + osccal_tuning + osccal_pitch;
+				}
 			}
+			wave_sync = 0;
 		}
-		_delay_ms(2);
 	}
 	return 0;
 }
@@ -253,6 +257,9 @@ ISR(TIM0_OVF_vect) {
 		if ( sample_count > count_per_2pi ) {
 			sample_count = 0;
 			toggle_triangle ^= 1;
+			if ( ! toggle_triangle ) wave_sync = 1; // After One Form of Triangle Wave
 		}
+	} else {
+		wave_sync = 1;
 	}
 }

@@ -11,25 +11,53 @@
 #include <stdlib.h>
 #include <avr/io.h>
 #include <avr/cpufunc.h>
+#include <avr/pgmspace.h>
 #include <util/delay.h>
 #include <util/delay_basic.h>
 
 #define CALIB_OSCCAL 0x03 // Frequency Calibration for Individual Difference at VCC = 3.3V
-#define NOISE_DELAY_DIVIDEND 30000 // To Calculate Delay Time to Generate Next Random Value
-#define RANDOM_INIT 0xFFFF // Initial Value to Making Random Value, Must Be Non-zero
+#define RANDOM_INIT 0x8000 // Initial Value to Making Random Value, Must Be Non-zero
+#define VOLTAGE_BIAS 0x80 // Decimal 128 on Noise Off
 
 /**
  * Output Noise from PB0 (OC0A)
- * Input from PB1 (Bit[0]), Set by Detecting Low
- * Input from PB2 (Bit[1]), Set by Detecting Low
- * Input from PB3 (Bit[2]), Set by Detecting Low
- * Input from PB4 (Bit[3]), Set by Detecting Low
- * Bit[2:0]:
- *     0b0000: Noise Off and High-Z State
- *     0b0001: Noise Type 1 (Slowest)
- *     ...
- *     0b1111: Noise Type 15 (Fastest)
+ * Input from PB1 (Volume Bit[0]), Set by Detecting Low
+ * Input from PB2 (Volume Bit[1]), Set by Detecting Low
+ * Input from PB3 (Type Bit[0]), Set by Detecting Low
+ * Input from PB4 (Type Bit[1]), Set by Detecting Low
+ * Volume Bit[1:0]:
+ *     0b00: Noise Off and Reset Random Value
+ *     0b01: Noise Volume[1] (Small)
+ *     0b10: Noise Volume[2] (Medium)
+ *     0b11: Noise Volume[3] (Big)
+ * Type Bit[1:0]:
+ *     0b00: Noise Type[0]
+ *     0b01: Noise Tyee[1]
+ *     0b10: Noise Type[2]
+ *     0b11: Noise Type[3]
  */
+
+// Delay Time in Tunrs to Generate Next Random Value
+uint16_t const array_type[4] PROGMEM = { // Array in Program Space
+	0,
+	3750,
+	7500,
+	11250
+};
+
+uint8_t const array_volume_mask[4] PROGMEM = { // Array in Program Space
+	0,
+	0x1F, // Up to Decimal 31
+	0x3F, // Up to Decimal 63
+	0x7F  // Up to Decimal 127
+};
+
+uint8_t const array_volume_offset[4] PROGMEM = { // Array in Program Space
+	0,
+	0x70, // Decimal 112
+	0x60, // Decimal 96
+	0x40  // Decimal 64
+};
 
 int main(void) {
 
@@ -38,15 +66,14 @@ int main(void) {
 	uint8_t const pin_button2 = _BV(PINB2); // Assign PB2 as Button Input
 	uint8_t const pin_button3 = _BV(PINB3); // Assign PB3 as Button Input
 	uint8_t const pin_button4 = _BV(PINB4); // Assign PB4 as Button Input
-	uint8_t const pwm_output_a_start = _BV(COM0A1); // Non-inverted
-	uint8_t const pwm_output_a_stop = (uint8_t)(~(_BV(COM0A1)|_BV(COM0A0)));
-	uint8_t const output_low = ~(_BV(PB0)); // PB0 (OC0A) Low
-	uint8_t const output_start = _BV(DDB0); // Bit Value Set PB0 (OC0A) as Output
-	uint8_t const output_stop = ~(_BV(DDB0)); // Bit Value Clear PB0 (OC0A)
 	uint16_t random_value;
 	uint16_t count_delay;
 	uint16_t max_count_delay;
-	uint8_t input_pin;
+	uint8_t volume_mask;
+	uint8_t volume_offset;
+	uint8_t input_volume;
+	uint8_t input_type;
+	uint8_t start_noise = 0;
 	uint8_t osccal_default; // Calibrated Default Value of OSCCAL
 
 	/* Clock Calibration */
@@ -56,72 +83,63 @@ int main(void) {
 
 	/* I/O Settings */
 
-	DDRB = 0; // All Input
+	DDRB = _BV(DDB0);
 	PORTB = _BV(PB1)|_BV(PB2)|_BV(PB3)|_BV(PB4); // Pullup Button Input (There is No Internal Pulldown)
-	//_NOP(); // Wait for Synchronization
 
 	/* Counter/Timer */
 
 	// Counter Reset
 	TCNT0 = 0;
 
-	// Select Fast PWM Mode (3)
+	// Set Output Compare A
+	OCR0A = VOLTAGE_BIAS;
+
+	// Select Fast PWM Mode (3) and Output from OC0A Non-inverted
 	// Fast PWM Mode (7) can make variable frequencies with adjustable duty cycle by settting OCR0A as TOP, but OC0B is only available.
-	TCCR0A = _BV(WGM01)|_BV(WGM00);
+	TCCR0A = _BV(WGM01)|_BV(WGM00)|_BV(COM0A1);
+
+	// Start Counter with I/O-Clock 9.6MHz / ( 1 * 256 ) = 37500Hz
+	TCCR0B = _BV(CS00);
 
 	// Initialize Local Variables Before Loop
-	random_value = RANDOM_INIT;
+	srand(RANDOM_INIT); // uint16_t
 	count_delay = 1;
 
 	while(1) {
-		input_pin = 0;
+		input_volume = 0;
+		input_type = 0;
 		if ( ! (PINB & pin_button1) ) {
-			input_pin |= 0b0001;
+			input_volume |= 0b01;
 		}
 		if ( ! (PINB & pin_button2) ) {
-			input_pin |= 0b0010;
+			input_volume |= 0b10;
 		}
 		if ( ! (PINB & pin_button3) ) {
-			input_pin |= 0b0100;
+			input_type |= 0b01;
 		}
 		if ( ! (PINB & pin_button4) ) {
-			input_pin |= 0b1000;
+			input_type |= 0b10;
 		}
-		max_count_delay = NOISE_DELAY_DIVIDEND >> input_pin;
-		if ( input_pin ) { // Output Noise
+		max_count_delay = pgm_read_byte(&(array_type[input_type]));
+		if ( input_volume ) { // Output Noise
 			if ( count_delay > max_count_delay ) {
-				srand(random_value - (TCNT0<<8|TCNT0)); // uint16_t
-				random_value = rand();
+				random_value = rand(); // 16-bit = 65535 Cycles
 				count_delay = 0;
+				volume_mask = pgm_read_byte(&(array_volume_mask[input_volume]));
+				volume_offset = pgm_read_byte(&(array_volume_offset[input_volume]));
+				OCR0A = (random_value & volume_mask) + volume_offset;
 			}
 			count_delay++;
-			// Invert Value in input_pin to Make Volume by Logical Shift Right
-			OCR0A = random_value;
-			// Start Output
-			if ( ! ( DDRB & output_start ) ) {
-				// Bit Value Set PB0 (OC0A) as Output
-				DDRB |= output_start;
-				// PWM Output Start
-				TCCR0A |= pwm_output_a_start;
-				// Start Counter with I/O-Clock 9.6MHz / ( 1 * 256 ) = 37500Hz
-				TCCR0B = _BV(CS00);
-			}
-		} else { // No Output
-			// Stop Output
-			if ( DDRB & output_start ) {
-				// Stop Counter
-				TCCR0B = 0;
-				// PWM Output Stop
-				OCR0A = 0;
-				TCCR0A &= pwm_output_a_stop;
-				// PB1 (OC0B) Low
-				PORTB &= output_low;
-				// Bit Value Clear PB0 (OC0A), High-Z State
-				DDRB &= output_stop;
+			if ( ! start_noise ) start_noise = 1;
+		} else {
+			if ( start_noise ) {
+				// PWM Output at Bias
+				OCR0A = VOLTAGE_BIAS;
 				// Counter Reset
 				TCNT0 = 0;
 				// Reset Random Value
-				random_value = RANDOM_INIT;
+				srand(RANDOM_INIT);
+				start_noise = 0;
 			}
 		}
 	}

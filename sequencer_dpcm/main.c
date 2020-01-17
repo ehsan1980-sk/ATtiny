@@ -40,6 +40,7 @@
 #define SEQUENCER_COUNTUPTO_BIT 2048
 #define SEQUENCER_SEQUENCENUMBER 2 // Maximum Number of Sequence
 #define DPCM_DELTA 2 // Delta of Differential Pulse Code Modulation
+#define INPUT_SENSITIVITY 500 // Less Number, More Sensitive (Except 0: Lowest Sensitivity)
 
 /* Global Variables without Initialization to Define at .bss Section and Squash .data Section */
 
@@ -140,6 +141,7 @@ int main(void) {
 	uint8_t sequencer_array_a_index = 0;
 	uint8_t sequencer_byte;
 	uint8_t osccal_default; // Calibrated Default Value of OSCCAL
+	uint16_t input_sensitivity_count = INPUT_SENSITIVITY;
 
 	/* Clock Prescaler for 4.8Mhz */
 	CLKPR = _BV(CLKPCE); // Clock Prescaler Change Enable
@@ -174,31 +176,34 @@ int main(void) {
 	TCCR0B = _BV(CS00);
 
 	while(1) {
-		input_pin = 0;
-		if ( ! (PINB & pin_button1) ) {
-			input_pin |= 0b01;
-		}
-		if ( ! (PINB & pin_button2) ) {
-			input_pin |= 0b10;
-		}
-		if ( ! (PINB & pin_button3) ) {
-			input_pin |= 0b100;
-		}
-		if ( input_pin >= SEQUENCER_SEQUENCENUMBER ) input_pin = SEQUENCER_SEQUENCENUMBER;
-		if ( input_pin != input_pin_last ) {
-			input_pin_last = input_pin;
-			if ( input_pin_last ) { // If Not Zero
-				sequencer_array_a_index = input_pin_last - 1;
-				sequencer_interval_count = 0;
-				sequencer_count_update = 0;
-				sequencer_count_last = 0;
-				sequencer_volume = VOLTAGE_BIAS;
-				OCR0A = VOLTAGE_BIAS;
-				OCR0B = VOLTAGE_BIAS;
-				TCNT0 = 0; // Counter Reset
-				TIFR0 |= _BV(TOV0); // Clear Set Timer/Counter0 Overflow Flag by Logic One
-				if ( ! (SREG & _BV(SREG_I)) ) sei(); // If Global Interrupt Enable Flag Is Not Set, Start to Issue Interrupt
+		if ( ! --input_sensitivity_count ) {
+			input_pin = 0;
+			if ( ! (PINB & pin_button1) ) {
+				input_pin |= 0b01;
 			}
+			if ( ! (PINB & pin_button2) ) {
+				input_pin |= 0b10;
+			}
+			if ( ! (PINB & pin_button3) ) {
+				input_pin |= 0b100;
+			}
+			if ( input_pin >= SEQUENCER_SEQUENCENUMBER ) input_pin = SEQUENCER_SEQUENCENUMBER;
+			if ( input_pin != input_pin_last ) {
+				input_pin_last = input_pin;
+				if ( input_pin_last ) { // If Not Zero
+					sequencer_array_a_index = input_pin_last - 1;
+					sequencer_interval_count = 0;
+					sequencer_count_update = 0;
+					sequencer_count_last = 0;
+					sequencer_volume = VOLTAGE_BIAS;
+					OCR0A = VOLTAGE_BIAS;
+					OCR0B = VOLTAGE_BIAS;
+					TCNT0 = 0; // Counter Reset
+					TIFR0 |= _BV(TOV0); // Clear Set Timer/Counter0 Overflow Flag by Logic One
+					if ( ! (SREG & _BV(SREG_I)) ) sei(); // If Global Interrupt Enable Flag Is Not Set, Start to Issue Interrupt
+				}
+			}
+			input_sensitivity_count = INPUT_SENSITIVITY;
 		}
 		if ( sequencer_count_update != sequencer_count_last ) {
 			if ( sequencer_count_update >= SEQUENCER_COUNTUPTO_BIT ) { // If Count Reaches Last

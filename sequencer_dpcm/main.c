@@ -21,10 +21,9 @@
 
 /**
  * Output from PB0 (OC0A)
- * Output from PB1 (OC0B)
- * Input from PB2 (Trigger Bit[0]), Set by Detecting Low
- * Input from PB3 (Trigger Bit[1]), Set by Detecting Low
- * Input from PB4 (Trigger Bit[2]), Set by Detecting Low
+ * Input from PB1 (Trigger Bit[0]), Set by Detecting Low
+ * Input from PB2 (Trigger Bit[1]), Set by Detecting Low
+ * Input from PB3 (Trigger Bit[2]), Set by Detecting Low
  * Trigger Bit[2:0]:
  *     0b000: Stop Sequencer
  *     0b001: Play Sequence No.1
@@ -32,6 +31,7 @@
  *     0b011: PLay Sequence No.3
  *     0b100: PLay Sequence No.4
  *     ...
+ * Note that PB4 is reserved as a digital input (pulled-up).
  */
 
 #define SAMPLE_RATE (double)(F_CPU / 256) // 18750 Samples per Seconds
@@ -40,7 +40,7 @@
 #define SEQUENCER_COUNTUPTO_BIT 2048
 #define SEQUENCER_SEQUENCENUMBER 2 // Maximum Number of Sequence
 #define DPCM_DELTA 2 // Delta of Differential Pulse Code Modulation
-#define INPUT_SENSITIVITY 500 // Less Number, More Sensitive (Except 0: Lowest Sensitivity)
+#define INPUT_SENSITIVITY 250 // Less Number, More Sensitive (Except 0: Lowest Sensitivity)
 
 /* Global Variables without Initialization to Define at .bss Section and Squash .data Section */
 
@@ -132,12 +132,14 @@ uint8_t const sequencer_array_a[SEQUENCER_SEQUENCENUMBER][SEQUENCER_COUNTUPTO] P
 int main(void) {
 
 	/* Declare and Define Local Constants and Variables */
-	uint8_t const pin_button1 = _BV(PINB2); // Assign PB2 as Button Input
-	uint8_t const pin_button2 = _BV(PINB3); // Assign PB3 as Button Input
-	uint8_t const pin_button3 = _BV(PINB4); // Assign PB4 as Button Input
+	uint8_t const pin_button1 = _BV(PINB1); // Assign PB1 as Button Input
+	uint8_t const pin_button2 = _BV(PINB2); // Assign PB2 as Button Input
+	uint8_t const pin_button3 = _BV(PINB3); // Assign PB3 as Button Input
 	uint16_t sequencer_count_last = 0;
 	uint8_t input_pin;
 	uint8_t input_pin_last = 0;
+	uint8_t input_pin_buffer = 0;
+	uint8_t input_pin_buffer_last = 0;
 	uint8_t sequencer_array_a_index = 0;
 	uint8_t sequencer_byte;
 	uint8_t osccal_default; // Calibrated Default Value of OSCCAL
@@ -157,53 +159,56 @@ int main(void) {
 	OSCCAL = osccal_default;
 
 	/* I/O Settings */
-	DIDR0 = _BV(PB5)|_BV(PB1)|_BV(PB0); // Digital Input Disable
-	PORTB = _BV(PB4)|_BV(PB3)|_BV(PB2); // Pullup Button Input (There is No Internal Pulldown)
-	DDRB = _BV(DDB1)|_BV(DDB0); // Bit Value Set PB0 (OC0A) and PB1 (OC0B)
+	DIDR0 = _BV(PB5)|_BV(PB0); // Digital Input Disable
+	PORTB = _BV(PB4)|_BV(PB3)|_BV(PB2)|_BV(PB1); // Pullup Button Input (There is No Internal Pulldown)
+	DDRB = _BV(DDB0); // Bit Value Set PB0 (OC0A)
 
 	/* Counter/Timer */
 	// Counter Reset
 	TCNT0 = 0;
 	// Clear Compare A
 	OCR0A = VOLTAGE_BIAS;
-	// Clear Compare B
-	OCR0B = VOLTAGE_BIAS;
 	// Set Timer/Counter0 Overflow Interrupt for "ISR(TIM0_OVF_vect)"
 	TIMSK0 = _BV(TOIE0);
-	// Select Fast PWM Mode (3) and Output from OC0A Non-inverted and OC0B Non-inverted
-	TCCR0A = _BV(WGM01)|_BV(WGM00)|_BV(COM0B1)|_BV(COM0A1);
+	// Select Fast PWM Mode (3) and Output from OC0A Non-inverted
+	TCCR0A = _BV(WGM01)|_BV(WGM00)|_BV(COM0A1);
 	// Start Counter with I/O-Clock 4.8MHz / ( 1 * 256 ) = 18750Hz
 	TCCR0B = _BV(CS00);
 
 	while(1) {
-		if ( ! --input_sensitivity_count ) {
-			input_pin = 0;
-			if ( ! (PINB & pin_button1) ) {
-				input_pin |= 0b01;
+		input_pin = 0;
+		if ( ! (PINB & pin_button1) ) {
+			input_pin |= 0b01;
+		}
+		if ( ! (PINB & pin_button2) ) {
+			input_pin |= 0b10;
+		}
+		if ( ! (PINB & pin_button3) ) {
+			input_pin |= 0b100;
+		}
+		if ( input_pin >= SEQUENCER_SEQUENCENUMBER ) input_pin = SEQUENCER_SEQUENCENUMBER;
+		if ( input_pin == input_pin_last ) { // If Match
+			if ( ! --input_sensitivity_count ) { // If Count Reaches Zero
+				input_pin_buffer = input_pin;
+				input_sensitivity_count = INPUT_SENSITIVITY;
 			}
-			if ( ! (PINB & pin_button2) ) {
-				input_pin |= 0b10;
-			}
-			if ( ! (PINB & pin_button3) ) {
-				input_pin |= 0b100;
-			}
-			if ( input_pin >= SEQUENCER_SEQUENCENUMBER ) input_pin = SEQUENCER_SEQUENCENUMBER;
-			if ( input_pin != input_pin_last ) {
-				input_pin_last = input_pin;
-				if ( input_pin_last ) { // If Not Zero
-					sequencer_array_a_index = input_pin_last - 1;
-					sequencer_interval_count = 0;
-					sequencer_count_update = 0;
-					sequencer_count_last = 0;
-					sequencer_volume = VOLTAGE_BIAS;
-					OCR0A = VOLTAGE_BIAS;
-					OCR0B = VOLTAGE_BIAS;
-					TCNT0 = 0; // Counter Reset
-					TIFR0 |= _BV(TOV0); // Clear Set Timer/Counter0 Overflow Flag by Logic One
-					if ( ! (SREG & _BV(SREG_I)) ) sei(); // If Global Interrupt Enable Flag Is Not Set, Start to Issue Interrupt
-				}
-			}
+		} else { // If Not Match
+			input_pin_last = input_pin;
 			input_sensitivity_count = INPUT_SENSITIVITY;
+		}
+		if ( input_pin_buffer != input_pin_buffer_last ) {
+			input_pin_buffer_last = input_pin_buffer;
+			if ( input_pin_buffer_last ) { // If Not Zero
+				sequencer_array_a_index = input_pin_buffer_last - 1;
+				sequencer_interval_count = 0;
+				sequencer_count_update = 0;
+				sequencer_count_last = 0;
+				sequencer_volume = VOLTAGE_BIAS;
+				OCR0A = VOLTAGE_BIAS;
+				TCNT0 = 0; // Counter Reset
+				TIFR0 |= _BV(TOV0); // Clear Set Timer/Counter0 Overflow Flag by Logic One
+				if ( ! (SREG & _BV(SREG_I)) ) sei(); // If Global Interrupt Enable Flag Is Not Set, Start to Issue Interrupt
+			}
 		}
 		if ( sequencer_count_update != sequencer_count_last ) {
 			if ( sequencer_count_update >= SEQUENCER_COUNTUPTO_BIT ) { // If Count Reaches Last
@@ -219,7 +224,6 @@ int main(void) {
 					sequencer_volume -= DPCM_DELTA;
 				}
 				OCR0A = sequencer_volume;
-				OCR0B = sequencer_volume;
 			}
 		}
 	}

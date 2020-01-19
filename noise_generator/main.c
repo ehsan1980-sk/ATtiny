@@ -16,8 +16,11 @@
 #include <util/delay_basic.h>
 
 #define CALIB_OSCCAL 0x03 // Frequency Calibration for Individual Difference at VCC = 3.3V
-#define RANDOM_INIT 0x8000 // Initial Value to Making Random Value, Must Be Non-zero
 #define VOLTAGE_BIAS 0x80 // Decimal 128 on Noise Off
+
+#define RANDOM_INIT 0x4000 // Initial Value to Making Random Value, Must Be Non-zero
+void random_make(); // 15-bit LFSR = 32767 Cycles
+uint16_t random_value;
 
 /**
  * Output Noise from PB0 (OC0A)
@@ -66,7 +69,6 @@ int main(void) {
 	uint8_t const pin_button2 = _BV(PINB2); // Assign PB2 as Button Input
 	uint8_t const pin_button3 = _BV(PINB3); // Assign PB3 as Button Input
 	uint8_t const pin_button4 = _BV(PINB4); // Assign PB4 as Button Input
-	uint16_t random_value;
 	uint16_t count_delay;
 	uint16_t max_count_delay;
 	uint8_t volume_mask;
@@ -76,33 +78,28 @@ int main(void) {
 	uint8_t start_noise = 0;
 	uint8_t osccal_default; // Calibrated Default Value of OSCCAL
 
-	/* Clock Calibration */
+	/* Initialize Global Variables */
+	random_value = RANDOM_INIT;
 
+	/* Clock Calibration */
 	osccal_default = OSCCAL + CALIB_OSCCAL; // Frequency Calibration for Individual Difference at VCC = 3.3V
 	OSCCAL = osccal_default;
 
 	/* I/O Settings */
-
 	DDRB = _BV(DDB0);
 	PORTB = _BV(PB1)|_BV(PB2)|_BV(PB3)|_BV(PB4); // Pullup Button Input (There is No Internal Pulldown)
 
 	/* Counter/Timer */
-
 	// Counter Reset
 	TCNT0 = 0;
-
 	// Set Output Compare A
 	OCR0A = VOLTAGE_BIAS;
-
 	// Select Fast PWM Mode (3) and Output from OC0A Non-inverted
 	// Fast PWM Mode (7) can make variable frequencies with adjustable duty cycle by settting OCR0A as TOP, but OC0B is only available.
 	TCCR0A = _BV(WGM01)|_BV(WGM00)|_BV(COM0A1);
-
 	// Start Counter with I/O-Clock 9.6MHz / ( 1 * 256 ) = 37500Hz
 	TCCR0B = _BV(CS00);
-
 	// Initialize Local Variables Before Loop
-	srand(RANDOM_INIT); // uint16_t
 	count_delay = 1;
 
 	while(1) {
@@ -123,7 +120,7 @@ int main(void) {
 		max_count_delay = pgm_read_byte(&(array_type[input_type]));
 		if ( input_volume ) { // Output Noise
 			if ( count_delay > max_count_delay ) {
-				random_value = rand(); // 16-bit = 65535 Cycles
+				random_make();
 				count_delay = 0;
 				volume_mask = pgm_read_byte(&(array_volume_mask[input_volume]));
 				volume_offset = pgm_read_byte(&(array_volume_offset[input_volume]));
@@ -138,10 +135,14 @@ int main(void) {
 				// Counter Reset
 				TCNT0 = 0;
 				// Reset Random Value
-				srand(RANDOM_INIT);
+				random_value = RANDOM_INIT;
 				start_noise = 0;
 			}
 		}
 	}
 	return 0;
+}
+
+void random_make() {
+	random_value = (random_value >> 1)|((((random_value & 0x10) >> 4)^(((random_value & 0x4) >> 2)^(((random_value & 0x2) >> 1)^(random_value & 0x1)))) << 14);
 }

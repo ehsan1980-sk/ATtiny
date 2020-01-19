@@ -19,7 +19,7 @@
 #define VOLTAGE_BIAS 0x80 // Decimal 128 on Noise Off
 
 #define RANDOM_INIT 0x4000 // Initial Value to Making Random Value, Must Be Non-zero
-void random_make(); // 15-bit LFSR = 32767 Cycles
+void random_make( uint8_t bool_high ); // bool_high: True is 15-bit LFSR (32767 Cycles), False is 7-bit LFSR (127 Cycles)
 uint16_t random_value;
 
 /**
@@ -120,7 +120,7 @@ int main(void) {
 		max_count_delay = pgm_read_byte(&(array_type[input_type]));
 		if ( input_volume ) { // Output Noise
 			if ( count_delay > max_count_delay ) {
-				random_make();
+				random_make( 1 );
 				count_delay = 0;
 				volume_mask = pgm_read_byte(&(array_volume_mask[input_volume]));
 				volume_offset = pgm_read_byte(&(array_volume_offset[input_volume]));
@@ -143,6 +143,6 @@ int main(void) {
 	return 0;
 }
 
-void random_make() {
-	random_value = (random_value >> 1)|((((random_value & 0x10) >> 4)^(((random_value & 0x4) >> 2)^(((random_value & 0x2) >> 1)^(random_value & 0x1)))) << 14);
+void random_make( uint8_t bool_high ) {
+	random_value = (random_value >> 1)|((((random_value & 0x10) >> 4)^(((random_value & 0x4) >> 2)^(((random_value & 0x2) >> 1)^(random_value & 0x1)))) << (bool_high ? 14 : 6));
 }

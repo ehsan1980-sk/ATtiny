@@ -195,7 +195,6 @@ int main(void) {
 				sequencer_count_last = 0;
 				sequencer_volume = VOLTAGE_BIAS;
 				OCR0A = VOLTAGE_BIAS;
-				TCNT0 = 0; // Counter Reset
 				TIFR0 |= _BV(TOV0); // Clear Set Timer/Counter0 Overflow Flag by Logic One
 				if ( ! (SREG & _BV(SREG_I)) ) sei(); // If Global Interrupt Enable Flag Is Not Set, Start to Issue Interrupt
 			}

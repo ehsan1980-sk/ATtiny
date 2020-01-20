@@ -132,9 +132,8 @@ uint8_t const sequencer_array_a[SEQUENCER_SEQUENCENUMBER][SEQUENCER_COUNTUPTO] P
 int main(void) {
 
 	/* Declare and Define Local Constants and Variables */
-	uint8_t const pin_button1 = _BV(PINB1); // Assign PB1 as Button Input
-	uint8_t const pin_button2 = _BV(PINB2); // Assign PB2 as Button Input
-	uint8_t const pin_button3 = _BV(PINB3); // Assign PB3 as Button Input
+	uint8_t const pin_input = _BV(PINB3)|_BV(PINB2)|_BV(PINB1); // Assign PB3, PB2 and PB1 as Trigger Bit[2:0]
+	uint8_t const pin_input_shift = PINB1;
 	uint16_t sequencer_count_last = 0;
 	uint8_t input_pin;
 	uint8_t input_pin_last = 0;
@@ -176,16 +175,7 @@ int main(void) {
 	TCCR0B = _BV(CS00);
 
 	while(1) {
-		input_pin = 0;
-		if ( ! (PINB & pin_button1) ) {
-			input_pin |= 0b01;
-		}
-		if ( ! (PINB & pin_button2) ) {
-			input_pin |= 0b10;
-		}
-		if ( ! (PINB & pin_button3) ) {
-			input_pin |= 0b100;
-		}
+		input_pin = ((PINB ^ pin_input) & pin_input) >> pin_input_shift;
 		if ( input_pin >= SEQUENCER_SEQUENCENUMBER ) input_pin = SEQUENCER_SEQUENCENUMBER;
 		if ( input_pin == input_pin_last ) { // If Match
 			if ( ! --input_sensitivity_count ) { // If Count Reaches Zero
@@ -211,14 +201,14 @@ int main(void) {
 			}
 		}
 		if ( sequencer_count_update != sequencer_count_last ) {
-			if ( sequencer_count_update >= SEQUENCER_COUNTUPTO_BIT ) { // If Count Reaches Last
-				sequencer_count_update = SEQUENCER_COUNTUPTO_BIT;
+			if ( sequencer_count_update > SEQUENCER_COUNTUPTO_BIT ) { // If Count Reaches Last
+				sequencer_count_update = SEQUENCER_COUNTUPTO_BIT + 1;
 				cli(); // Stop to Issue Interrupt
 			}
 			sequencer_count_last = sequencer_count_update;
-			if ( sequencer_count_last < SEQUENCER_COUNTUPTO_BIT ) {
+			if ( sequencer_count_last <= SEQUENCER_COUNTUPTO_BIT ) {
 				sequencer_byte = pgm_read_byte(&(sequencer_array_a[sequencer_array_a_index][(sequencer_count_last - 1) >> 3]));
-				if ( sequencer_byte & (0x1 << (sequencer_count_last & 0b111)) ) {
+				if ( sequencer_byte & (0x1 << ((sequencer_count_last - 1) & 0b111)) ) {
 					sequencer_volume += DPCM_DELTA;
 				} else {
 					sequencer_volume -= DPCM_DELTA;

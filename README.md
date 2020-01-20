@@ -115,3 +115,5 @@ git diff main.c
 * [AVR Libc Reference Manual](https://www.microchip.com/webdoc/AVRLibcReferenceManual/index.html)
 
 * [AVR Assembler](https://www.microchip.com/webdoc/GUID-E06F3258-483F-4A7B-B1F8-69933E029363/index.html): Assembler with the original syntax, but not GNU Assembler's syntax. Obtain the documentation of the instruction set at the preface.
+
+* [Table of Linear Feedback Shift Registers by Roy Ward, Timothy C.A. Molteno](https://www.physics.otago.ac.nz/reports/electronics/ETR2012-1.pdf)

@@ -19,25 +19,29 @@
 #define VOLTAGE_BIAS 0x80 // Decimal 128 on Noise Off
 
 #define RANDOM_INIT 0x4000 // Initial Value to Making Random Value, Must Be Non-zero
-void random_make( uint8_t bool_high ); // bool_high: True is 15-bit LFSR (32767 Cycles), False is 7-bit LFSR (127 Cycles)
+void random_make( uint8_t bool_high ); // bool_high: True (Not Zero) = 15-bit LFSR-2 (32767 Cycles), Flase (Zero) = 7-bit LFSR-2 (127 Cycles)
 uint16_t random_value;
 
 /**
  * Output Noise from PB0 (OC0A)
  * Input from PB1 (Volume Bit[0]), Set by Detecting Low
  * Input from PB2 (Volume Bit[1]), Set by Detecting Low
- * Input from PB3 (Type Bit[0]), Set by Detecting Low
- * Input from PB4 (Type Bit[1]), Set by Detecting Low
  * Volume Bit[1:0]:
  *     0b00: Noise Off and Reset Random Value
  *     0b01: Noise Volume[1] (Small)
  *     0b10: Noise Volume[2] (Medium)
  *     0b11: Noise Volume[3] (Big)
+ * Input from PB3 (Type Bit[0]), Set by Detecting Low
+ * Input from PB4 (Type Bit[1]), Set by Detecting Low
  * Type Bit[1:0]:
  *     0b00: Noise Type[0]
  *     0b01: Noise Tyee[1]
  *     0b10: Noise Type[2]
  *     0b11: Noise Type[3]
+ * Input from PB5 (Cycle Bit[0]), Set by Detecting Low (Needed Additional Fuse Setting, Causing to Disable Re-programming)
+ * Cycle Bit[0]
+ *     0b0: Low Cycle (7-bit, 127 Cycles)
+ *     0b1: High Cycle (15-bit, 32757 Cycles)
  */
 
 // Delay Time in Tunrs to Generate Next Random Value
@@ -65,16 +69,19 @@ uint8_t const array_volume_offset[4] PROGMEM = { // Array in Program Space
 int main(void) {
 
 	/* Declare and Define Local Constants and Variables */
-	uint8_t const pin_button1 = _BV(PINB1); // Assign PB1 as Button Input
-	uint8_t const pin_button2 = _BV(PINB2); // Assign PB2 as Button Input
-	uint8_t const pin_button3 = _BV(PINB3); // Assign PB3 as Button Input
-	uint8_t const pin_button4 = _BV(PINB4); // Assign PB4 as Button Input
+	uint8_t const pin_volume = _BV(PINB2)|_BV(PINB1); // Assign PB2 and PB1 as Volume Bit[1:0]
+	uint8_t const pin_type = _BV(PINB4)|_BV(PINB3); // Assign PB4 and PB3 as Type Bit[1:0]
+	uint8_t const pin_cycle = _BV(PINB5); // Assign PB5 as Cycle Bit[0]
+	uint8_t const pin_volume_shift = PINB1;
+	uint8_t const pin_type_shift = PINB3;
+	uint8_t const pin_cycle_shift = PINB5;
 	uint16_t count_delay;
 	uint16_t max_count_delay;
 	uint8_t volume_mask;
 	uint8_t volume_offset;
 	uint8_t input_volume;
 	uint8_t input_type;
+	uint8_t input_cycle;
 	uint8_t start_noise = 0;
 	uint8_t osccal_default; // Calibrated Default Value of OSCCAL
 
@@ -87,7 +94,7 @@ int main(void) {
 
 	/* I/O Settings */
 	DDRB = _BV(DDB0);
-	PORTB = _BV(PB1)|_BV(PB2)|_BV(PB3)|_BV(PB4); // Pullup Button Input (There is No Internal Pulldown)
+	PORTB = _BV(PB5)|_BV(PB4)|_BV(PB3)|_BV(PB2)|_BV(PB1); // Pullup Button Input (There is No Internal Pulldown)
 
 	/* Counter/Timer */
 	// Counter Reset
@@ -103,24 +110,13 @@ int main(void) {
 	count_delay = 1;
 
 	while(1) {
-		input_volume = 0;
-		input_type = 0;
-		if ( ! (PINB & pin_button1) ) {
-			input_volume |= 0b01;
-		}
-		if ( ! (PINB & pin_button2) ) {
-			input_volume |= 0b10;
-		}
-		if ( ! (PINB & pin_button3) ) {
-			input_type |= 0b01;
-		}
-		if ( ! (PINB & pin_button4) ) {
-			input_type |= 0b10;
-		}
+		input_volume = ((PINB ^ pin_volume) & pin_volume) >> pin_volume_shift;
+		input_type = ((PINB ^ pin_type) & pin_type) >> pin_type_shift;
+		input_cycle = ((PINB ^ pin_cycle) & pin_cycle) >> pin_cycle_shift;
 		max_count_delay = pgm_read_byte(&(array_type[input_type]));
 		if ( input_volume ) { // Output Noise
 			if ( count_delay > max_count_delay ) {
-				random_make( 1 );
+				random_make( input_cycle );
 				count_delay = 0;
 				volume_mask = pgm_read_byte(&(array_volume_mask[input_volume]));
 				volume_offset = pgm_read_byte(&(array_volume_offset[input_volume]));
@@ -144,5 +140,5 @@ int main(void) {
 }
 
 void random_make( uint8_t bool_high ) {
-	random_value = (random_value >> 1)|((((random_value & 0x10) >> 4)^(((random_value & 0x4) >> 2)^(((random_value & 0x2) >> 1)^(random_value & 0x1)))) << (bool_high ? 14 : 6));
+	random_value = (random_value >> 1)|((((random_value & 0x2) >> 1)^(random_value & 0x1)) << (bool_high ? 14 : 6));
 }

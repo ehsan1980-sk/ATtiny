@@ -93,6 +93,10 @@ git diff main.c
 
 * Sequencer emits 180 degrees phase shifted saw tooth wave; because in the ideal behavior, the wave can be transformed to sine wave through omitting all harmonics. Making square wave is easy; however in my experience, it often has noise like resonance after rising or falling edge, causing losses of electric power. Square/pulse wave can be made by a comparator inputted saw tooth wave.
 
+## Electric Schematics
+
+* [Sound Output with PWM of ATtiny13](schematics/sound_output_pwm.pdf)
+
 ## Technical Notes
 
 **December 1, 2019**
@@ -116,4 +120,4 @@ git diff main.c
 
 * [AVR Assembler](https://www.microchip.com/webdoc/GUID-E06F3258-483F-4A7B-B1F8-69933E029363/index.html): Assembler with the original syntax, but not GNU Assembler's syntax. Obtain the documentation of the instruction set at the preface.
 
-* [Table of Linear Feedback Shift Registers by Roy Ward, Timothy C.A. Molteno](https://www.physics.otago.ac.nz/reports/electronics/ETR2012-1.pdf)
+* [Table of Linear Feedback Shift Registers by Roy Ward, Timothy C.A. Molteno (PDF File)](https://www.physics.otago.ac.nz/reports/electronics/ETR2012-1.pdf)

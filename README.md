@@ -95,7 +95,7 @@ git diff main.c
 
 ## Electric Schematics
 
-* [Sound Output with PWM of ATtiny13](schematics/sound_output_pwm.pdf)
+* [Sound Output with PWM of ATtiny13](schematics/sound_output_pwm.pdf): Tested with a USB mono microphone input (TRS) at the dB gain -1.00 to 1.00, i.e., no boost or less. A line-level input is preferred, but not tested. DC offset occurs on Noise Generator and Sequencer Noise. Small capacitance for C3 makes a high-pass filter to ease the DC offset. I tested 10uF and 1uF for C3, and confirmed that the DC offset is eased.
 
 ## Technical Notes
 

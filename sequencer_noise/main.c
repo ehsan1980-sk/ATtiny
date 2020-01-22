@@ -20,7 +20,7 @@
 #define VOLTAGE_BIAS 0x80 // Decimal 128 on Noise Off
 
 #define RANDOM_INIT 0x4000 // Initial Value to Making Random Value, Must Be Non-zero
-void random_make( uint8_t bool_high ); // bool_high: True (Not Zero) = 15-bit LFSR-2 (32767 Cycles), Flase (Zero) = 7-bit LFSR-2 (127 Cycles)
+inline void random_make( uint8_t bool_high ); // bool_high: True (Not Zero) = 15-bit LFSR-2 (32767 Cycles), Flase (Zero) = 7-bit LFSR-2 (127 Cycles)
 uint16_t random_value;
 
 /**
@@ -195,6 +195,7 @@ int main(void) {
 				sequencer_interval_count = 0;
 				sequencer_count_update = 1;
 				sequencer_count_last = 0;
+				random_value = RANDOM_INIT; // Reset Random Value
 				TIFR0 |= _BV(TOV0); // Clear Set Timer/Counter0 Overflow Flag by Logic One
 				if ( ! start_noise ) start_noise = 1;
 				if ( ! (SREG & _BV(SREG_I)) ) sei(); // If Global Interrupt Enable Flag Is Not Set, Start to Issue Interrupt
@@ -218,8 +219,6 @@ int main(void) {
 				volume_offset = VOLTAGE_BIAS;
 				noise_cycle = 1;
 				start_noise = 0;
-				// Reset Random Value
-				random_value = RANDOM_INIT;
 			}
 		}
 		if ( count_delay > max_count_delay ) {
@@ -240,6 +239,6 @@ ISR(TIM0_OVF_vect) {
 	}
 }
 
-void random_make( uint8_t bool_high ) {
+inline void random_make( uint8_t bool_high ) { // The inline attribute doesn't make a call, but implants codes.
 	random_value = (random_value >> 1)|((((random_value & 0x2) >> 1)^(random_value & 0x1)) << (bool_high ? 14 : 6));
 }

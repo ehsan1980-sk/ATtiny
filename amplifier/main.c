@@ -18,22 +18,23 @@
 #define CALIB_OSCCAL 0x03 // Frequency Calibration for Individual Difference at VCC = 3.3V
 
 /**
- * Amplified (Approx. 6 Times at 3.3V) Output from PB0 (OC0A)
- * Input from PB2 (ADC1)
- * Input from PB3 Gain (Bit[0]), Set by Detecting Low
- * Input from PB4 Gain (Bit[1]), Set by Detecting Low
+ * Output from PB0 (OC0A)
+ * Input from PB1 Gain (Bit[0]), Set by Detecting Low
+ * Input from PB2 Gain (Bit[1]), Set by Detecting Low
  * Gain Bit[1:0]:
  *     0b00: Gain 0dB (Voltage), Multiplier 0
  *     0b01: Gain Approx. 6dB, Multiplier 2
  *     0b10: Gain Approx. 12dB, Multiplier 4
  *     0b11: Gain Approx. 18dB, Multiplier 8
+ * Input from PB4 (ADC2)
  * Note: The reference voltage of ADC is 1.1V.
  *       For example, at 3.3V for VCC, gain approx. 9.5dB (Multiplier 3) is added to the value determined by Gain Bit[1:0].
  */
 
 #define SAMPLE_RATE (double)(F_CPU / 256) // 37500 Samples per Seconds
-#define ADC_BIAS 465 // Bias 0.5V to Internal Reference 1.1V
 #define INPUT_SENSITIVITY 250 // Less Number, More Sensitive (Except 0: Lowest Sensitivity)
+#define BIAS_DETECTION_TURNS 100 // Get Moving Average of ADC Values at Start to Know Voltage Bias
+#define CLIP_THRESHOLD 120 // Clip ADC Value over/under Voltage Bias +- This Value
 
 typedef union _adc16 {
 	struct _value8 {
@@ -50,14 +51,18 @@ volatile uint8_t wave_sync; // Sync with Process in ISR
 int main(void) {
 
 	/* Declare and Define Local Constants and Variables */
-	uint8_t const pin_input = _BV(PINB4)|_BV(PINB3); // Assign PB3, PB2 and PB1 as Trigger Bit[1:0]
-	uint8_t const pin_input_shift = PINB3;
+	uint8_t const pin_input = _BV(PINB2)|_BV(PINB1); // Assign PB2 and PB1 as Gain Bit[1:0]
+	uint8_t const pin_input_shift = PINB1;
 	uint16_t input_sensitivity_count = INPUT_SENSITIVITY;
-	adc16 adc_channel_1;
+	adc16 adc_sample;
+	adc16 adc_bias;
+	adc16 adc_clip_upper;
+	adc16 adc_clip_under;
 	uint8_t input_pin;
 	uint8_t input_pin_last = 0;
 	uint8_t input_pin_buffer = 0;
 	uint8_t osccal_default; // Calibrated Default Value of OSCCAL
+	uint8_t value_round;
 
 	/* Initialize Global Variables */
 	wave_sync = 0;
@@ -67,24 +72,38 @@ int main(void) {
 	OSCCAL = osccal_default;
 
 	/* I/O Settings */
-	PORTB = _BV(PB4)|_BV(PB3); // Pullup Button Input (There is No Internal Pulldown)
+	PORTB = _BV(PB2)|_BV(PB1); // Pullup Button Input (There is No Internal Pulldown)
 	DDRB = _BV(DDB0); // Bit Value Set PB0 (OC0A) as Output
 
 	/* ADC */
-	// For Noise Reduction of ADC, Disable All Digital Input Buffers
-	DIDR0 = _BV(ADC0D)|_BV(ADC1D)|_BV(AIN1D)|_BV(AIN0D);
-	// Set ADC, Internal Voltage Reference (1.1V), ADC1 (PB2)
-	ADMUX = _BV(REFS0)|_BV(MUX0);
+	// For Noise Reduction of ADC, Disable Digital Input Buffers
+	DIDR0 = _BV(ADC0D)|_BV(ADC3D)|_BV(ADC2D)|_BV(AIN0D);
+	// Set ADC, Internal Voltage Reference (1.1V), ADC2 (PB4)
+	ADMUX = _BV(REFS0)|_BV(MUX1);
 	// ADC Auto Trigger Free Running Mode
 	ADCSRB = 0;
 	// ADC Enable, Start, Set Auto Trigger Enable, Prescaler 16 to Have ADC Clock 600Khz
 	ADCSRA = _BV(ADEN)|_BV(ADSC)|_BV(ADATE)|_BV(ADPS2);
 
+	/* Voltage Bias Detection */
+	// Wait for First ADC Value (25 ADC Clocks) and Transient Response Since Power On or Reset
+	_delay_ms( 10 );
+	adc_bias.value8.lower = ADCL;
+	adc_bias.value8.upper = ADCH; // ADC[9:0] Will Be Updated After High Bits Are Read
+	for ( uint16_t i = 0; i < BIAS_DETECTION_TURNS; i++ ) {
+		_delay_us( 30 ); // Wait for 13.5 ADC Clocks for Next ADC Value
+		adc_sample.value8.lower = ADCL;
+		adc_sample.value8.upper = ADCH;
+		adc_bias.value16 = (adc_bias.value16 + adc_sample.value16) >> 1;
+	}
+	adc_clip_upper.value16 = adc_bias.value16 + CLIP_THRESHOLD;
+	adc_clip_under.value16 = adc_bias.value16 - CLIP_THRESHOLD;
+
 	/* Counter/Timer */
 	// Counter Reset
 	TCNT0 = 0;
 	// Set Output Compare A
-	OCR0A = ADC_BIAS >> 2;
+	OCR0A = (uint8_t)(adc_bias.value16 >> 2);
 	// Set Timer/Counter0 Overflow Interrupt for "ISR(TIM0_OVF_vect)"
 	TIMSK0 = _BV(TOIE0);
 	// Select Fast PWM Mode (3) and Output from OC0A Non-inverted and OC0B Non-inverted
@@ -109,19 +128,24 @@ int main(void) {
 				input_sensitivity_count = INPUT_SENSITIVITY;
 			}
 
-			adc_channel_1.value8.lower = ADCL;
-			adc_channel_1.value8.upper = ADCH; // ADC[9:0] Will Be Updated After High Bits Are Read
-			adc_channel_1.value16 -= ADC_BIAS;
+			adc_sample.value8.lower = ADCL;
+			adc_sample.value8.upper = ADCH;
+			adc_sample.value16 -= adc_bias.value16;
 			// Arithmetic Left Shift (Signed Value in Bit[9:0], Bit[15:10] Same as Bit[9])
-			adc_channel_1.value16 <<= input_pin_buffer;
-			adc_channel_1.value16 += ADC_BIAS;
-			if ( adc_channel_1.value16 > 1023 ) {
-				adc_channel_1.value16 = 1023;
-			} else if ( adc_channel_1.value16 < 0 ) {
-				adc_channel_1.value16 = 0;
+			adc_sample.value16 <<= input_pin_buffer;
+			adc_sample.value16 += adc_bias.value16;
+			if ( adc_sample.value16 > adc_clip_upper.value16 ) {
+				adc_sample.value16 = adc_clip_upper.value16;
+			} else if ( adc_sample.value16 < adc_clip_under.value16 ) {
+				adc_sample.value16 = adc_clip_under.value16;
 			}
-			adc_channel_1.value16 >>= 2;
-			OCR0A = adc_channel_1.value8.lower;
+			if ( adc_sample.value8.lower & 0b10 ) { // ADC Bit[1] to Be Rounded
+				value_round = 1;
+			} else {
+				value_round = 0;
+			}
+			adc_sample.value16 >>= 2;
+			OCR0A = adc_sample.value8.lower + value_round;
 			wave_sync = 0;
 		}
 	}

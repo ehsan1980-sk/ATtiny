@@ -34,7 +34,7 @@
 #define SAMPLE_RATE (double)(F_CPU / 256) // 37500 Samples per Seconds
 #define INPUT_SENSITIVITY 250 // Less Number, More Sensitive (Except 0: Lowest Sensitivity)
 #define BIAS_DETECTION_TURNS 100 // Get Moving Average of ADC Values at Start to Know Voltage Bias
-#define CLIP_THRESHOLD 120 // Clip ADC Value over/under Voltage Bias +- This Value
+#define CLIP_THRESHOLD 480 // Clip ADC Value over/under Voltage Bias +- This Value (9-bit Unsigned)
 
 typedef union _adc16 {
 	struct _value8 {
@@ -97,7 +97,12 @@ int main(void) {
 		adc_bias.value16 = (adc_bias.value16 + adc_sample.value16) >> 1;
 	}
 	adc_clip_upper.value16 = adc_bias.value16 + CLIP_THRESHOLD;
-	adc_clip_under.value16 = adc_bias.value16 - CLIP_THRESHOLD;
+	if ( adc_clip_upper.value16 > 1023 ) adc_clip_upper.value16 = 1023; // 10-bit ADC
+	if ( adc_bias.value16 < CLIP_THRESHOLD ) {
+		adc_clip_under.value16 = 0;
+	} else {
+		adc_clip_under.value16 = adc_bias.value16 - CLIP_THRESHOLD;
+	}
 
 	/* Counter/Timer */
 	// Counter Reset

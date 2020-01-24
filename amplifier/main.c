@@ -18,11 +18,30 @@
 #define CALIB_OSCCAL 0x03 // Frequency Calibration for Individual Difference at VCC = 3.3V
 
 /**
- * Amplified (Approx. 3 Times) Output from PB0 (OC0A)
+ * Amplified (Approx. 6 Times at 3.3V) Output from PB0 (OC0A)
  * Input from PB2 (ADC1)
+ * Input from PB3 Gain (Bit[0]), Set by Detecting Low
+ * Input from PB4 Gain (Bit[1]), Set by Detecting Low
+ * Gain Bit[1:0]:
+ *     0b00: Gain 0dB (Voltage), Multiplier 0
+ *     0b01: Gain Approx. 6dB, Multiplier 2
+ *     0b10: Gain Approx. 12dB, Multiplier 4
+ *     0b11: Gain Approx. 18dB, Multiplier 8
+ * Note: The reference voltage of ADC is 1.1V.
+ *       For example, at 3.3V for VCC, gain approx. 9.5dB (Multiplier 3) is added to the value determined by Gain Bit[1:0].
  */
 
 #define SAMPLE_RATE (double)(F_CPU / 256) // 37500 Samples per Seconds
+#define ADC_BIAS 465 // Bias 0.5V to Internal Reference 1.1V
+#define INPUT_SENSITIVITY 250 // Less Number, More Sensitive (Except 0: Lowest Sensitivity)
+
+typedef union _adc16 {
+	struct _value8 {
+		uint8_t lower; // Bit[7:0] = ADC[7:0]
+		uint8_t upper; // Bit[1:0] = ADC[9:8]
+	} value8;
+	int16_t value16;
+} adc16;
 
 /* Global Variables without Initialization to Define at .bss Section and Squash .data Section */
 
@@ -31,8 +50,14 @@ volatile uint8_t wave_sync; // Sync with Process in ISR
 int main(void) {
 
 	/* Declare and Define Local Constants and Variables */
+	uint8_t const pin_input = _BV(PINB4)|_BV(PINB3); // Assign PB3, PB2 and PB1 as Trigger Bit[1:0]
+	uint8_t const pin_input_shift = PINB3;
+	uint16_t input_sensitivity_count = INPUT_SENSITIVITY;
+	adc16 adc_channel_1;
+	uint8_t input_pin;
+	uint8_t input_pin_last = 0;
+	uint8_t input_pin_buffer = 0;
 	uint8_t osccal_default; // Calibrated Default Value of OSCCAL
-	uint8_t value_adc_channel_1_high = 0; // Bit[7:0] Is ADC[9:2]
 
 	/* Initialize Global Variables */
 	wave_sync = 0;
@@ -42,14 +67,14 @@ int main(void) {
 	OSCCAL = osccal_default;
 
 	/* I/O Settings */
-	PORTB = 0; // All Low
+	PORTB = _BV(PB4)|_BV(PB3); // Pullup Button Input (There is No Internal Pulldown)
 	DDRB = _BV(DDB0); // Bit Value Set PB0 (OC0A) as Output
 
 	/* ADC */
 	// For Noise Reduction of ADC, Disable All Digital Input Buffers
-	DIDR0 = _BV(ADC0D)|_BV(ADC2D)|_BV(ADC3D)|_BV(ADC1D)|_BV(AIN1D)|_BV(AIN0D);
-	// Set ADC, Internal Voltage Reference (1.1V), ADLAR, ADC1 (PB2)
-	ADMUX = _BV(REFS0)|_BV(ADLAR)|_BV(MUX0);
+	DIDR0 = _BV(ADC0D)|_BV(ADC1D)|_BV(AIN1D)|_BV(AIN0D);
+	// Set ADC, Internal Voltage Reference (1.1V), ADC1 (PB2)
+	ADMUX = _BV(REFS0)|_BV(MUX0);
 	// ADC Auto Trigger Free Running Mode
 	ADCSRB = 0;
 	// ADC Enable, Start, Set Auto Trigger Enable, Prescaler 16 to Have ADC Clock 600Khz
@@ -58,8 +83,8 @@ int main(void) {
 	/* Counter/Timer */
 	// Counter Reset
 	TCNT0 = 0;
-	// Clear Output Compare A
-	OCR0A = 0;
+	// Set Output Compare A
+	OCR0A = ADC_BIAS >> 2;
 	// Set Timer/Counter0 Overflow Interrupt for "ISR(TIM0_OVF_vect)"
 	TIMSK0 = _BV(TOIE0);
 	// Select Fast PWM Mode (3) and Output from OC0A Non-inverted and OC0B Non-inverted
@@ -73,8 +98,30 @@ int main(void) {
 
 	while(1) {
 		if ( wave_sync ) {
-			value_adc_channel_1_high = ADCH; // ADC[9:0] Will Be Updated After High Bits Are Read
-			OCR0A = value_adc_channel_1_high;
+			input_pin = ((PINB ^ pin_input) & pin_input) >> pin_input_shift;
+			if ( input_pin == input_pin_last ) { // If Match
+				if ( ! --input_sensitivity_count ) { // If Count Reaches Zero
+					input_pin_buffer = input_pin;
+					input_sensitivity_count = INPUT_SENSITIVITY;
+				}
+			} else { // If Not Match
+				input_pin_last = input_pin;
+				input_sensitivity_count = INPUT_SENSITIVITY;
+			}
+
+			adc_channel_1.value8.lower = ADCL;
+			adc_channel_1.value8.upper = ADCH; // ADC[9:0] Will Be Updated After High Bits Are Read
+			adc_channel_1.value16 -= ADC_BIAS;
+			// Arithmetic Left Shift (Signed Value in Bit[9:0], Bit[15:10] Same as Bit[9])
+			adc_channel_1.value16 <<= input_pin_buffer;
+			adc_channel_1.value16 += ADC_BIAS;
+			if ( adc_channel_1.value16 > 1023 ) {
+				adc_channel_1.value16 = 1023;
+			} else if ( adc_channel_1.value16 < 0 ) {
+				adc_channel_1.value16 = 0;
+			}
+			adc_channel_1.value16 >>= 2;
+			OCR0A = adc_channel_1.value8.lower;
 			wave_sync = 0;
 		}
 	}

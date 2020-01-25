@@ -91,19 +91,6 @@ int main(void) {
 	// ADC Enable, Prescaler 16 to Have ADC Clock 600Khz
 	ADCSRA = _BV(ADEN)|_BV(ADPS2);
 
-	/* Counter/Timer */
-	// Counter Reset
-	TCNT0 = 0;
-	// Set Output Compare A
-	OCR0A = (uint8_t)(adc_bias.value16 >> 2);
-	// Set Timer/Counter0 Overflow Interrupt for "ISR(TIM0_OVF_vect)"
-	TIMSK0 = _BV(TOIE0);
-	// Select Fast PWM Mode (3) and Output from OC0A Non-inverted and OC0B Non-inverted
-	// Fast PWM Mode (7) can make variable frequencies with adjustable duty cycle by settting OCR0A as TOP, but OC0B is only available.
-	TCCR0A = _BV(WGM01)|_BV(WGM00)|_BV(COM0B1)|_BV(COM0A1);
-	// Start Counter with I/O-Clock 9.6MHz / ( 1 * 256 ) = 37500Hz
-	TCCR0B = _BV(CS00);
-
 	/* Voltage Bias Detection */
 	// Wait for End of Transient Response Since Power On or Reset
 	_delay_ms( 10 );
@@ -127,6 +114,19 @@ int main(void) {
 		adc_clip_under.value16 = adc_bias.value16 - CLIP_THRESHOLD;
 	}
 
+	/* Counter/Timer */
+	// Counter Reset
+	TCNT0 = 0;
+	// Set Output Compare A
+	OCR0A = (uint8_t)(adc_bias.value16 >> 2);
+	// Set Timer/Counter0 Overflow Interrupt for "ISR(TIM0_OVF_vect)"
+	TIMSK0 = _BV(TOIE0);
+	// Select Fast PWM Mode (3) and Output from OC0A Non-inverted and OC0B Non-inverted
+	// Fast PWM Mode (7) can make variable frequencies with adjustable duty cycle by settting OCR0A as TOP, but OC0B is only available.
+	TCCR0A = _BV(WGM01)|_BV(WGM00)|_BV(COM0B1)|_BV(COM0A1);
+	// Start Counter with I/O-Clock 9.6MHz / ( 1 * 256 ) = 37500Hz
+	TCCR0B = _BV(CS00);
+
 	/* Preperation to Enter Loop */
 	// For First Obtention of ADC Value on Loop
 	ADCSRA |= start_adc;
@@ -142,11 +142,11 @@ int main(void) {
 
 ISR(TIM0_OVF_vect, ISR_NAKED) { // No Need to Save Registers and SREG Before Entering ISR
 	/* Declare and Define Local Constants and Variables */
-	adc16 adc_sample;
-	uint8_t input_pin;
 	uint8_t const start_adc = _BV(ADSC);
 	uint8_t const pin_input = _BV(PINB2)|_BV(PINB1); // Assign PB2 and PB1 as Gain Bit[1:0]
 	uint8_t const pin_input_shift = PINB1;
+	adc16 adc_sample;
+	uint8_t input_pin;
 	uint8_t value_round;
 
 	adc_sample.value8.lower = ADCL;
@@ -170,7 +170,8 @@ ISR(TIM0_OVF_vect, ISR_NAKED) { // No Need to Save Registers and SREG Before Ent
 	adc_sample.value16 += adc_bias.value16;
 	if ( adc_sample.value16 > adc_clip_upper.value16 ) {
 		adc_sample.value16 = adc_clip_upper.value16;
-	} else if ( adc_sample.value16 < adc_clip_under.value16 ) {
+	}
+	if ( adc_sample.value16 < adc_clip_under.value16 ) {
 		adc_sample.value16 = adc_clip_under.value16;
 	}
 	if ( adc_sample.value8.lower & 0b10 ) { // ADC Bit[1] to Be Rounded

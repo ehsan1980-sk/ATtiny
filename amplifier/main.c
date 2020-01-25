@@ -56,17 +56,15 @@ typedef union _adc16 {
 /* Global Variables without Initialization to Define at .bss Section and Squash .data Section */
 
 uint16_t input_sensitivity_count;
-adc16 adc_sample;
 adc16 adc_bias;
 adc16 adc_clip_upper;
 adc16 adc_clip_under;
-uint8_t input_pin;
 uint8_t input_pin_last;
 uint8_t input_pin_buffer;
 
 int main(void) {
-
 	/* Declare and Define Local Constants and Variables */
+	adc16 adc_sample;
 	uint8_t const start_adc = _BV(ADSC);
 	uint8_t osccal_default; // Calibrated Default Value of OSCCAL
 
@@ -143,6 +141,9 @@ int main(void) {
 }
 
 ISR(TIM0_OVF_vect, ISR_NAKED) { // No Need to Save Registers and SREG Before Entering ISR
+	/* Declare and Define Local Constants and Variables */
+	adc16 adc_sample;
+	uint8_t input_pin;
 	uint8_t const start_adc = _BV(ADSC);
 	uint8_t const pin_input = _BV(PINB2)|_BV(PINB1); // Assign PB2 and PB1 as Gain Bit[1:0]
 	uint8_t const pin_input_shift = PINB1;

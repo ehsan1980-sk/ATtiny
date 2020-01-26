@@ -38,17 +38,21 @@
  *        + 27 microseconds (1 / Sampling rate): Maximum Time Needed to Update Compare Value (OCR0A) in PWM
  *        + 27 microseconds (1 / Sampling rate): Generation of Updated PWM Pulse
  *        = 81 microseconds
+ * Note4: In my experience, when connecting a ECM (Electret Condenser Microphone) to an ADC directly (with DC cut and bias),
+ *        the input has negative DC offset which affects the output of PWM wave, i.e., unintended clipping the upper/under peak.
+ *        Change the value of ADC_BIAS_CORRECTION, PWM_CLIP_UPPER, and PWM_CLIP_UNDER to absorb the issue on DC offset.
+ * Note5: The bias value for ADC is 512 in default.
+ *        The value is 1024 in VCC, and the value is 0 in GND. So VCC divided by 2 is the bias voltage.
  */
 
 #define SAMPLE_RATE (double)(F_CPU / 256) // 37500 Samples per Second
 #define INPUT_SENSITIVITY 250 // Less Number, More Sensitive (Except 0: Lowest Sensitivity)
 #define ADC_BIAS_DEFAULT 512 // 10-bit Unsigned
-#define ADC_BIAS_CORRECTION -12 // 10-bit Unsigned, Correction of DC Bias at ADC
+#define ADC_BIAS_CORRECTION -13 // Correction of DC Bias at ADC
+#define ADC_CLIP 112 // 8-bit Unsigned
 #define PWM_BIAS 128 // 8-bit Unsigned
-#define PWM_CLIP_UPPER 228 // Clip PWM Value over This Value (8-bit Unsigned), Consider of ADC_BIAS_CORRECTION (240 + Correction)
-#define PWM_CLIP_UNDER 4 // Clip PWM Value under This Value (8-bit Unsigned), Consider of ADC_BIAS_CORRECTION (16 + Correction)
-#define BIAS_DETECTION_DELAY 500 // Wait Time for End of Transient Response in Milliseconds
-#define BIAS_DETECTION_TURNS 1000 // Get Moving Average of ADC Values at Start to Know Voltage Bias
+#define PWM_CLIP_UPPER PWM_BIAS + ADC_CLIP + ADC_BIAS_CORRECTION // Clip PWM Value over This Value, 8-bit Unsigned
+#define PWM_CLIP_UNDER PWM_BIAS - ADC_CLIP + ADC_BIAS_CORRECTION // Clip PWM Value under This Value, 8-bit Unsigned (No Negative)
 
 typedef union _adc16 {
 	struct _value8 {
@@ -61,14 +65,11 @@ typedef union _adc16 {
 /* Global Variables without Initialization to Define at .bss Section and Squash .data Section */
 
 uint16_t input_sensitivity_count;
-adc16 adc_bias;
 uint8_t input_pin_last;
 uint8_t input_pin_buffer;
 
 int main(void) {
 	/* Declare and Define Local Constants and Variables */
-	adc16 adc_sample;
-	adc16 adc_sample2;
 	uint8_t const start_adc = _BV(ADSC);
 	uint8_t osccal_default; // Calibrated Default Value of OSCCAL
 
@@ -106,23 +107,6 @@ int main(void) {
 	// Start Counter with I/O-Clock 9.6MHz / ( 1 * 256 ) = 37500Hz
 	TCCR0B = _BV(CS00);
 
-	/* Voltage Bias Detection */
-	// Wait for End of Transient Response Since Power On or Reset
-	_delay_ms( BIAS_DETECTION_DELAY );
-	ADCSRA |= start_adc;
-	while( ADCSRA & start_adc );
-	adc_sample.value8.lower = ADCL;
-	adc_sample.value8.upper = ADCH; // ADC[9:0] Will Be Updated After High Bits Are Read
-	for ( uint16_t i = 0; i < BIAS_DETECTION_TURNS; i++ ) {
-		ADCSRA |= start_adc;
-		while( ADCSRA & start_adc );
-		adc_sample2.value8.lower = ADCL;
-		adc_sample2.value8.upper = ADCH;
-		adc_sample.value16 = (adc_sample.value16 + adc_sample2.value16) >> 1;
-		_delay_us( 30 );
-	}
-	adc_bias.value16 = adc_sample.value16 + ADC_BIAS_CORRECTION;
-
 	/* Preperation to Enter Loop */
 	// For First Obtention of ADC Value on Loop
 	ADCSRA |= start_adc;
@@ -159,10 +143,15 @@ ISR(TIM0_OVF_vect, ISR_NAKED) { // No Need to Save Registers and SREG Before Ent
 		input_sensitivity_count = INPUT_SENSITIVITY;
 	}
 
-	//adc_sample.value16 -= ADC_BIAS_DEFAULT;
-	adc_sample.value16 -= adc_bias.value16;
+	adc_sample.value16 -= ADC_BIAS_DEFAULT;
 	// Arithmetic Left Shift (Signed Value in Bit[9:0], Bit[15:10] Same as Bit[9])
 	adc_sample.value16 <<= input_pin_buffer; // Gain Bit[1:0]
+	if ( adc_sample.value16 > ADC_CLIP ) {
+		adc_sample.value16 = ADC_CLIP;
+	}
+	if ( adc_sample.value16 < -(ADC_CLIP) ) {
+		adc_sample.value16 = -(ADC_CLIP);
+	}
 	adc_sample.value16 += PWM_BIAS; // Gain 12dB (Multiplier 4)
 	if ( adc_sample.value16 > PWM_CLIP_UPPER ) {
 		adc_sample.value16 = PWM_CLIP_UPPER;

@@ -48,7 +48,7 @@
 #define SAMPLE_RATE (double)(F_CPU / 256) // 37500 Samples per Second
 #define INPUT_SENSITIVITY 250 // Less Number, More Sensitive (Except 0: Lowest Sensitivity)
 #define ADC_BIAS_DEFAULT 512 // 10-bit Unsigned
-#define ADC_BIAS_CORRECTION -13 // Correction of DC Bias at ADC
+#define ADC_BIAS_CORRECTION -3 // Correction of DC Bias at ADC
 #define ADC_CLIP 112 // 8-bit Unsigned
 #define PWM_BIAS 128 // 8-bit Unsigned
 #define PWM_CLIP_UPPER PWM_BIAS + ADC_CLIP + ADC_BIAS_CORRECTION // Clip PWM Value over This Value, 8-bit Unsigned
@@ -146,12 +146,6 @@ ISR(TIM0_OVF_vect, ISR_NAKED) { // No Need to Save Registers and SREG Before Ent
 	adc_sample.value16 -= ADC_BIAS_DEFAULT;
 	// Arithmetic Left Shift (Signed Value in Bit[9:0], Bit[15:10] Same as Bit[9])
 	adc_sample.value16 <<= input_pin_buffer; // Gain Bit[1:0]
-	if ( adc_sample.value16 > ADC_CLIP ) {
-		adc_sample.value16 = ADC_CLIP;
-	}
-	if ( adc_sample.value16 < -(ADC_CLIP) ) {
-		adc_sample.value16 = -(ADC_CLIP);
-	}
 	adc_sample.value16 += PWM_BIAS; // Gain 12dB (Multiplier 4)
 	if ( adc_sample.value16 > PWM_CLIP_UPPER ) {
 		adc_sample.value16 = PWM_CLIP_UPPER;

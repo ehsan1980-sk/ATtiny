@@ -40,9 +40,18 @@
  *        = 81 microseconds
  * Note4: In my experience, when connecting a ECM (Electret Condenser Microphone) to an ADC directly (with DC cut and bias),
  *        the input has negative DC offset which affects the output of PWM wave, i.e., unintended clipping the upper/under peak.
- *        Change the value of ADC_BIAS_CORRECTION, PWM_CLIP_UPPER, and PWM_CLIP_UNDER to absorb the issue on DC offset.
+ *        Change the value of ADC_BIAS_CORRECTION to absorb the issue on DC offset.
  * Note5: The bias value for ADC is 512 in default.
  *        The value is 1024 in VCC, and the value is 0 in GND. So VCC divided by 2 is the bias voltage.
+ *        The bias voltage may be changed depending on electric conditions, setting Gain Bit[1:0], jacks, etc.
+ *        Unfitted bias voltage causes gain loss.
+ *        Applying a potentiometer can adjust the bias voltage.
+ * Note6: Noise is caused by clock jitter, resonance of the electrical circuit, resolution of quantization, etc.
+ *        Precise external clocks to CLKI (PB3) reduces clock jitter.
+ *        However, it depends on applications, a class-D amp / a noise + overdrive.
+ *        A decoupling capacitor reduces resonance noise. I tested 1uF capacitor close to VCC and GND of the chip.
+ * Note7: VCC affects the threshold voltage of clipping peaks.
+ *        In the same value of ADC_CLIP, VCC on 4.5V can expand the range not to be clipped rather than VCC on 3.3v.
  */
 
 #define SAMPLE_RATE (double)(F_CPU / 256) // 37500 Samples per Second

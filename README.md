@@ -63,7 +63,7 @@ programmer
 cd ~/Desktop
 git clone https://github.com/JimmyKenMerchant/ATtiny.git
 # Enter Directory
-cd ATtiny/blinker
+cd ATtiny/13/blinker
 # Compile
 make
 # Program Binary to TinyAVR/ATtiny
@@ -83,7 +83,7 @@ make install
 * Sequencer has alternative versions such as "main.c.jinglebells".
 
 ```bash
-cd ATtiny/sequencer
+cd ATtiny/13/sequencer
 # Change Original Version to Alternative Version
 mv main.c main.c.origin
 cp main.c.jinglebells main.c

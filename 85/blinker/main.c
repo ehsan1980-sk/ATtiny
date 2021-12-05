@@ -1,10 +1,7 @@
 /**
- * main.c
- *
- * Author: Kenta Ishii
+ * Copyright 2021 Kenta Ishii
  * License: 3-Clause BSD License
- * License URL: https://opensource.org/licenses/BSD-3-Clause
- *
+ * SPDX Short Identifier: BSD-3-Clause
  */
 
 #define F_CPU 8000000UL // Default 8.0Mhz to ATtiny85

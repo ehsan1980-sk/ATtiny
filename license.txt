@@ -1,4 +1,4 @@
-Copyright 2019 Kenta Ishii
+Copyright 2019-2021 Kenta Ishii
 
 Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
 

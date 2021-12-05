@@ -1,8 +1,7 @@
 ##
-# Makefile
-# Author: Kenta Ishii
-# License: MIT
-# License URL: https://opensource.org/licenses/MIT
+# Copyright 2021 Kenta Ishii
+# License: 3-Clause BSD License
+# SPDX Short Identifier: BSD-3-Clause
 ##
 
 # Name of Program

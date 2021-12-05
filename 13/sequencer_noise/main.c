@@ -1,10 +1,7 @@
 /**
- * main.c
- *
- * Author: Kenta Ishii
+ * Copyright 2021 Kenta Ishii
  * License: 3-Clause BSD License
- * License URL: https://opensource.org/licenses/BSD-3-Clause
- *
+ * SPDX Short Identifier: BSD-3-Clause
  */
 
 #define F_CPU 9600000UL // Default 9.6Mhz to ATtiny13
@@ -51,7 +48,7 @@ uint16_t sequencer_count_update;
 uint8_t sequencer_volume;
 
 // Delay Time in Tunrs to Generate Next Random Value
-uint16_t const array_type[16] PROGMEM = { // Array in Program Space
+uint16_t const array_delay_time[16] PROGMEM = { // Array in Program Space
 	0,
 	1,
 	2,
@@ -93,7 +90,7 @@ uint8_t const array_volume_offset[8] PROGMEM = { // Array in Program Space
 };
 
 /**
- * Bit[3:0]: Index of array_type (0-15)
+ * Bit[3:0]: Index of array_delay_time (0-15)
  * Bit[6:4]: Index of array_volume (0-7)
  * Bit[7]: 0 as 7-bit LFSR-2, 1 as 15-bit LFSR-2
  */
@@ -169,11 +166,11 @@ int main(void) {
 	// Start Counter with I/O-Clock 9.6MHz / ( 1 * 256 ) = 37500Hz
 	TCCR0B = _BV(CS00);
 	// Initialize Local Variables Before Loop
-	count_delay = 1;
+	count_delay = 0;
 	max_count_delay = 0;
 	volume_mask = 0x00;
 	volume_offset = VOLTAGE_BIAS;
-	noise_cycle = 1;
+	noise_cycle = 0;
 	start_noise = 0;
 
 	while(1) {
@@ -209,7 +206,7 @@ int main(void) {
 			sequencer_count_last = sequencer_count_update;
 			if ( sequencer_count_last <= SEQUENCER_COUNTUPTO ) {
 				sequencer_byte = pgm_read_byte(&(sequencer_array_a[sequencer_array_a_index][sequencer_count_last - 1]));
-				max_count_delay = pgm_read_byte(&(array_type[sequencer_byte & 0xF]));
+				max_count_delay = pgm_read_word(&(array_delay_time[sequencer_byte & 0xF]));
 				volume_mask = pgm_read_byte(&(array_volume_mask[(sequencer_byte & 0x70) >> 4]));
 				volume_offset = pgm_read_byte(&(array_volume_offset[(sequencer_byte & 0x70) >> 4]));
 				noise_cycle = sequencer_byte & 0x80;
@@ -217,7 +214,7 @@ int main(void) {
 				max_count_delay = 0;
 				volume_mask = 0x00;
 				volume_offset = VOLTAGE_BIAS;
-				noise_cycle = 1;
+				noise_cycle = 0;
 				start_noise = 0;
 			}
 		}

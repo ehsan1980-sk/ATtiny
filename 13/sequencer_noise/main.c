@@ -14,11 +14,6 @@
 #include <util/delay_basic.h>
 
 #define CALIB_OSCCAL 0x03 // Frequency Calibration for Individual Difference at VCC = 3.3V
-#define VOLTAGE_BIAS 0x80 // Decimal 128 on Noise Off
-
-#define RANDOM_INIT 0x4000 // Initial Value to Making Random Value, Must Be Non-zero
-inline void random_make( uint8_t bool_high ); // bool_high: True (Not Zero) = 15-bit LFSR-2 (32767 Cycles), Flase (Zero) = 7-bit LFSR-2 (127 Cycles)
-uint16_t random_value;
 
 /**
  * Output from PB0 (OC0A)
@@ -35,11 +30,16 @@ uint16_t random_value;
  * Note that PB4 is reserved as a digital input (pulled-up).
  */
 
-#define SAMPLE_RATE (double)(F_CPU / 256) // 37500 Samples per Seconds
+#define RANDOM_INIT 0x4000 // Initial Value to Making Random Value, Must Be Non-zero
+inline void random_make( uint8_t high_resolution ); // high_resolution: True (Not Zero) = 15-bit LFSR-2 (32767 Cycles), Flase (Zero) = 7-bit LFSR-2 (127 Cycles)
+uint16_t random_value;
+
+#define SEQUENCER_VOLTAGE_BIAS 0x80 // Decimal 128 on Noise Off
+#define SEQUENCER_SAMPLE_RATE (double)(F_CPU / 256) // 37500 Samples per Seconds
 #define SEQUENCER_INTERVAL 250 // Approx. 150Hz = 0.0067 Seconds
 #define SEQUENCER_COUNTUPTO 64 // 0.0067 Seconds * 64
 #define SEQUENCER_SEQUENCENUMBER 5 // Maximum Number of Sequence
-#define INPUT_SENSITIVITY 250 // Less Number, More Sensitive (Except 0: Lowest Sensitivity)
+#define SEQUENCER_INPUT_SENSITIVITY 250 // Less Number, More Sensitive (Except 0: Lowest Sensitivity)
 
 /* Global Variables without Initialization to Define at .bss Section and Squash .data Section */
 
@@ -48,7 +48,7 @@ uint16_t sequencer_count_update;
 uint8_t sequencer_volume;
 
 // Delay Time in Tunrs to Generate Next Random Value
-uint16_t const array_delay_time[16] PROGMEM = { // Array in Program Space
+uint16_t const sequencer_delay_time_array[16] PROGMEM = { // Array in Program Space
 	0,
 	1,
 	2,
@@ -67,7 +67,7 @@ uint16_t const array_delay_time[16] PROGMEM = { // Array in Program Space
 	16384,
 };
 
-uint8_t const array_volume_mask[8] PROGMEM = { // Array in Program Space
+uint8_t const sequencer_volume_mask_array[8] PROGMEM = { // Array in Program Space
 	0x00,
 	0x01, // Up to Decimal 1
 	0x03, // Up to Decimal 3
@@ -78,8 +78,8 @@ uint8_t const array_volume_mask[8] PROGMEM = { // Array in Program Space
 	0x7F  // Up to Decimal 127
 };
 
-uint8_t const array_volume_offset[8] PROGMEM = { // Array in Program Space
-	VOLTAGE_BIAS,
+uint8_t const sequencer_volume_offset_array[8] PROGMEM = { // Array in Program Space
+	SEQUENCER_VOLTAGE_BIAS,
 	0x7F, // Decimal 127
 	0x7E, // Decimal 126
 	0x7C, // Decimal 124
@@ -90,11 +90,11 @@ uint8_t const array_volume_offset[8] PROGMEM = { // Array in Program Space
 };
 
 /**
- * Bit[3:0]: Index of array_delay_time (0-15)
- * Bit[6:4]: Index of array_volume (0-7)
+ * Bit[3:0]: Index of sequencer_delay_time_array (0-15)
+ * Bit[6:4]: Index of sequencer_volume_mask_array and sequencer_volume_offset_array (0-7)
  * Bit[7]: 0 as 7-bit LFSR-2, 1 as 15-bit LFSR-2
  */
-uint8_t const sequencer_array_a[SEQUENCER_SEQUENCENUMBER][SEQUENCER_COUNTUPTO] PROGMEM = { // Array in Program Space
+uint8_t const sequencer_program_array[SEQUENCER_SEQUENCENUMBER][SEQUENCER_COUNTUPTO] PROGMEM = { // Array in Program Space
 	{0x90,0xA0,0xB0,0xC0,0xD0,0xE0,0xF0,0xF0,0xC0,0xC0,0xC0,0xC0,0xC0,0xC0,0xC0,0xC0,
 	 0xB0,0xB0,0xB0,0xB0,0xB0,0xB0,0xB0,0xB0,0xA0,0xA0,0xA0,0xA0,0xA0,0xA0,0xA0,0xA0,
 	 0x90,0x90,0x90,0x90,0x90,0x90,0x90,0x90,0x80,0x80,0x80,0x80,0x80,0x80,0x80,0x80,
@@ -117,7 +117,6 @@ uint8_t const sequencer_array_a[SEQUENCER_SEQUENCENUMBER][SEQUENCER_COUNTUPTO] P
 	 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00}  // Sequence No.5
 };
 
-
 int main(void) {
 
 	/* Declare and Define Local Constants and Variables */
@@ -127,22 +126,22 @@ int main(void) {
 	uint16_t max_count_delay;
 	uint8_t volume_mask;
 	uint8_t volume_offset;
-	uint8_t noise_cycle;
+	uint8_t random_high_resolution;
 	uint8_t start_noise;
 	uint16_t sequencer_count_last = 0;
 	uint8_t input_pin;
 	uint8_t input_pin_last = 0;
 	uint8_t input_pin_buffer = 0;
 	uint8_t input_pin_buffer_last = 0;
-	uint8_t sequencer_array_a_index = 0;
+	uint8_t sequencer_program_index = 0;
 	uint8_t sequencer_byte;
 	uint8_t osccal_default; // Calibrated Default Value of OSCCAL
-	uint16_t input_sensitivity_count = INPUT_SENSITIVITY;
+	uint16_t input_sensitivity_count = SEQUENCER_INPUT_SENSITIVITY;
 
 	/* Initialize Global Variables */
 	sequencer_interval_count = 0;
 	sequencer_count_update = 0;
-	sequencer_volume = VOLTAGE_BIAS;
+	sequencer_volume = SEQUENCER_VOLTAGE_BIAS;
 	random_value = RANDOM_INIT;
 
 	/* Clock Calibration */
@@ -157,7 +156,7 @@ int main(void) {
 	// Counter Reset
 	TCNT0 = 0;
 	// Set Output Compare A
-	OCR0A = VOLTAGE_BIAS;
+	OCR0A = SEQUENCER_VOLTAGE_BIAS;
 	// Set Timer/Counter0 Overflow Interrupt for "ISR(TIM0_OVF_vect)"
 	TIMSK0 = _BV(TOIE0);
 	// Select Fast PWM Mode (3) and Output from OC0A Non-inverted
@@ -166,11 +165,11 @@ int main(void) {
 	// Start Counter with I/O-Clock 9.6MHz / ( 1 * 256 ) = 37500Hz
 	TCCR0B = _BV(CS00);
 	// Initialize Local Variables Before Loop
-	count_delay = 0;
+	count_delay = 1; // For Process on First Turn
 	max_count_delay = 0;
 	volume_mask = 0x00;
-	volume_offset = VOLTAGE_BIAS;
-	noise_cycle = 0;
+	volume_offset = SEQUENCER_VOLTAGE_BIAS;
+	random_high_resolution = 0;
 	start_noise = 0;
 
 	while(1) {
@@ -179,16 +178,16 @@ int main(void) {
 		if ( input_pin == input_pin_last ) { // If Match
 			if ( ! --input_sensitivity_count ) { // If Count Reaches Zero
 				input_pin_buffer = input_pin;
-				input_sensitivity_count = INPUT_SENSITIVITY;
+				input_sensitivity_count = SEQUENCER_INPUT_SENSITIVITY;
 			}
 		} else { // If Not Match
 			input_pin_last = input_pin;
-			input_sensitivity_count = INPUT_SENSITIVITY;
+			input_sensitivity_count = SEQUENCER_INPUT_SENSITIVITY;
 		}
 		if ( input_pin_buffer != input_pin_buffer_last ) {
 			input_pin_buffer_last = input_pin_buffer;
 			if ( input_pin_buffer_last ) { // If Not Zero
-				sequencer_array_a_index = input_pin_buffer_last - 1;
+				sequencer_program_index = input_pin_buffer_last - 1;
 				sequencer_interval_count = 0;
 				sequencer_count_update = 1;
 				sequencer_count_last = 0;
@@ -205,21 +204,21 @@ int main(void) {
 			}
 			sequencer_count_last = sequencer_count_update;
 			if ( sequencer_count_last <= SEQUENCER_COUNTUPTO ) {
-				sequencer_byte = pgm_read_byte(&(sequencer_array_a[sequencer_array_a_index][sequencer_count_last - 1]));
-				max_count_delay = pgm_read_word(&(array_delay_time[sequencer_byte & 0xF]));
-				volume_mask = pgm_read_byte(&(array_volume_mask[(sequencer_byte & 0x70) >> 4]));
-				volume_offset = pgm_read_byte(&(array_volume_offset[(sequencer_byte & 0x70) >> 4]));
-				noise_cycle = sequencer_byte & 0x80;
+				sequencer_byte = pgm_read_byte(&(sequencer_program_array[sequencer_program_index][sequencer_count_last - 1]));
+				max_count_delay = pgm_read_word(&(sequencer_delay_time_array[sequencer_byte & 0xF]));
+				volume_mask = pgm_read_byte(&(sequencer_volume_mask_array[(sequencer_byte & 0x70) >> 4]));
+				volume_offset = pgm_read_byte(&(sequencer_volume_offset_array[(sequencer_byte & 0x70) >> 4]));
+				random_high_resolution = sequencer_byte & 0x80;
 			} else {
 				max_count_delay = 0;
 				volume_mask = 0x00;
-				volume_offset = VOLTAGE_BIAS;
-				noise_cycle = 0;
+				volume_offset = SEQUENCER_VOLTAGE_BIAS;
+				random_high_resolution = 0;
 				start_noise = 0;
 			}
 		}
 		if ( count_delay > max_count_delay ) {
-			if ( start_noise ) random_make( noise_cycle );
+			if ( start_noise ) random_make( random_high_resolution );
 			count_delay = 0;
 			OCR0A = (random_value & volume_mask) + volume_offset;
 		}
@@ -236,6 +235,6 @@ ISR(TIM0_OVF_vect) {
 	}
 }
 
-inline void random_make( uint8_t bool_high ) { // The inline attribute doesn't make a call, but implants codes.
-	random_value = (random_value >> 1)|((((random_value & 0x2) >> 1)^(random_value & 0x1)) << (bool_high ? 14 : 6));
+inline void random_make( uint8_t high_resolution ) { // The inline attribute doesn't make a call, but implants codes.
+	random_value = (random_value >> 1)|((((random_value & 0x2) >> 1)^(random_value & 0x1)) << (high_resolution ? 14 : 6));
 }

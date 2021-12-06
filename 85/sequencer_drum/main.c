@@ -14,11 +14,6 @@
 #include <util/delay_basic.h>
 
 #define CALIB_OSCCAL 0x00 // Frequency Calibration for Individual Difference at VCC = 3.0V
-#define VOLTAGE_BIAS 0x80 // Decimal 128 on Noise Off
-
-#define RANDOM_INIT 0x4000 // Initial Value to Making Random Value, Must Be Non-zero
-inline void random_make( uint8_t bool_high ); // bool_high: True (Not Zero) = 15-bit LFSR-2 (32767 Cycles), Flase (Zero) = 7-bit LFSR-2 (127 Cycles)
-uint16_t random_value;
 
 /**
  * Output from PB0 (OC0A)
@@ -32,13 +27,18 @@ uint16_t random_value;
  * Button 2 from PB4, Push by Detecting Low to Change Beats per Second
  */
 
-#define SAMPLE_RATE (double)(F_CPU / 256) // 31250 Samples per Seconds
+#define RANDOM_INIT 0x4000 // Initial Value to Making Random Value, Must Be Non-zero
+inline void random_make( uint8_t high_resolution ); // high_resolution: True (Not Zero) = 15-bit LFSR-2 (32767 Cycles), Flase (Zero) = 7-bit LFSR-2 (127 Cycles)
+uint16_t random_value;
+
+#define SEQUENCER_VOLTAGE_BIAS 0x80 // Decimal 128 on Noise Off
+#define SEQUENCER_SAMPLE_RATE (double)(F_CPU / 256) // 31250 Samples per Seconds
 #define SEQUENCER_INTERVAL_NUMBER 9
 #define SEQUENCER_INTERVAL_INDEX_DEFAULT 0
 #define SEQUENCER_COUNTUPTO 64
 #define SEQUENCER_LENGTH 2 // Length of Sequence
-#define INPUT_SENSITIVITY 250 // Less Number, More Sensitive (Except 0: Lowest Sensitivity)
-#define BUTTON_SENSITIVITY 2500 // Less Number, More Sensitive (Except 0: Lowest Sensitivity)
+#define SEQUENCER_INPUT_SENSITIVITY 250 // Less Number, More Sensitive (Except 0: Lowest Sensitivity)
+#define SEQUENCER_BUTTON_SENSITIVITY 2500 // Less Number, More Sensitive (Except 0: Lowest Sensitivity)
 
 /* Global Variables without Initialization to Define at .bss Section and Squash .data Section */
 
@@ -92,7 +92,7 @@ uint8_t const sequencer_volume_mask_array[8] PROGMEM = { // Array in Program Spa
 };
 
 uint8_t const sequencer_volume_offset_array[8] PROGMEM = { // Array in Program Space
-	VOLTAGE_BIAS,
+	SEQUENCER_VOLTAGE_BIAS,
 	0x7C, // Decimal 124
 	0x78, // Decimal 120
 	0x70, // Decimal 112
@@ -104,10 +104,10 @@ uint8_t const sequencer_volume_offset_array[8] PROGMEM = { // Array in Program S
 
 /**
  * Bit[3:0]: Index of sequencer_delay_time_array (0-15)
- * Bit[6:4]: Index of sequencer_array_volume (0-7)
+ * Bit[6:4]: Index of sequencer_volume_mask_array and sequencer_volume_offset_array (0-7)
  * Bit[7]: 0 as 7-bit LFSR-2, 1 as 15-bit LFSR-2
  */
-uint8_t const sequencer_array[SEQUENCER_LENGTH][SEQUENCER_COUNTUPTO] PROGMEM = { // Array in Program Space
+uint8_t const sequencer_program_array[SEQUENCER_LENGTH][SEQUENCER_COUNTUPTO] PROGMEM = { // Array in Program Space
 	{0xB4,0x00,0xB4,0x00,0xB4,0x00,0xB4,0x00,0xB4,0x00,0xB4,0x00,0xB4,0x00,0xB4,0x00,
 	 0x98,0x00,0x00,0x00,0x98,0x00,0x00,0x00,0x98,0x00,0x00,0x00,0x98,0x00,0x00,0x00,
 	 0xB4,0x00,0xB4,0x00,0xB4,0x00,0xB4,0x00,0xB4,0x00,0xB4,0x00,0xB4,0x00,0xB4,0x00,
@@ -117,7 +117,6 @@ uint8_t const sequencer_array[SEQUENCER_LENGTH][SEQUENCER_COUNTUPTO] PROGMEM = {
 	 0xA6,0xA6,0xA6,0xA6,0xA6,0xA6,0xA6,0xA6,0xA6,0xA6,0xA6,0xA6,0xA6,0xA6,0xA6,0xA6,
 	 0x98,0x98,0x98,0x98,0x98,0x98,0x98,0x98,0x98,0x98,0x98,0x98,0x8A,0x8A,0x8A,0x8A} // Sequence Index No. 1
 };
-
 
 int main(void) {
 
@@ -130,18 +129,18 @@ int main(void) {
 	uint16_t max_count_delay;
 	uint8_t volume_mask;
 	uint8_t volume_offset;
-	uint8_t noise_cycle;
+	uint8_t random_high_resolution;
 	uint8_t start_noise;
 	uint16_t sequencer_count_last = 0;
 	uint8_t input_pin;
 	uint8_t input_pin_last = 0;
 	uint8_t sequencer_interval_index = 0;
-	uint8_t sequencer_array_index = 0;
+	uint8_t sequencer_program_index = 0;
 	uint8_t sequencer_byte;
 	uint8_t osccal_default; // Calibrated Default Value of OSCCAL
-	uint16_t input_sensitivity_count = INPUT_SENSITIVITY;
-	uint16_t button_1_sensitivity_count = BUTTON_SENSITIVITY;
-	uint16_t button_2_sensitivity_count = BUTTON_SENSITIVITY;
+	uint16_t input_sensitivity_count = SEQUENCER_INPUT_SENSITIVITY;
+	uint16_t button_1_sensitivity_count = SEQUENCER_BUTTON_SENSITIVITY;
+	uint16_t button_2_sensitivity_count = SEQUENCER_BUTTON_SENSITIVITY;
 	uint8_t is_start_sequence = 0;
 
 	/* Initialize Global Variables */
@@ -149,7 +148,7 @@ int main(void) {
 	sequencer_interval_index = SEQUENCER_INTERVAL_INDEX_DEFAULT;
 	sequencer_interval_count = 0;
 	sequencer_count_update = 0;
-	sequencer_volume = VOLTAGE_BIAS;
+	sequencer_volume = SEQUENCER_VOLTAGE_BIAS;
 	random_value = RANDOM_INIT;
 
 	/* Clock Calibration */
@@ -164,7 +163,7 @@ int main(void) {
 	// Counter Reset
 	TCNT0 = 0;
 	// Set Output Compare A
-	OCR0A = VOLTAGE_BIAS;
+	OCR0A = SEQUENCER_VOLTAGE_BIAS;
 	// Set Timer/Counter0 Overflow Interrupt for "ISR(TIM0_OVF_vect)"
 	TIMSK = _BV(TOIE0);
 	// Select Fast PWM Mode (3) and Output from OC0A Non-inverted
@@ -173,11 +172,11 @@ int main(void) {
 	// Start Counter with I/O-Clock 6.4MHz / ( 1 * 256 ) = 25000Hz
 	TCCR0B = _BV(CS00);
 	// Initialize Local Variables Before Loop
-	count_delay = 0;
+	count_delay = 1; // For Process on First Turn
 	max_count_delay = 0;
 	volume_mask = 0x00;
-	volume_offset = VOLTAGE_BIAS;
-	noise_cycle = 0;
+	volume_offset = SEQUENCER_VOLTAGE_BIAS;
+	random_high_resolution = 0;
 	start_noise = 0;
 
 	while(1) {
@@ -185,16 +184,16 @@ int main(void) {
 		if ( input_pin >= SEQUENCER_LENGTH ) input_pin = SEQUENCER_LENGTH - 1;
 		if ( input_pin == input_pin_last ) { // If Match
 			if ( ! --input_sensitivity_count ) { // If Count Reaches Zero
-				sequencer_array_index = input_pin_last;
-				input_sensitivity_count = INPUT_SENSITIVITY;
+				sequencer_program_index = input_pin_last;
+				input_sensitivity_count = SEQUENCER_INPUT_SENSITIVITY;
 			}
 		} else { // If Not Match
 			input_pin_last = input_pin;
-			input_sensitivity_count = INPUT_SENSITIVITY;
+			input_sensitivity_count = SEQUENCER_INPUT_SENSITIVITY;
 		}
 		if ( (PINB ^ pin_button_1) & pin_button_1 ) { // If Match
 			if ( ! --button_1_sensitivity_count ) { // If Count Reaches Zero
-				button_1_sensitivity_count = BUTTON_SENSITIVITY;
+				button_1_sensitivity_count = SEQUENCER_BUTTON_SENSITIVITY;
 				if ( ! is_start_sequence ) {
 					sequencer_interval_count = 0;
 					sequencer_count_update = 1;
@@ -208,37 +207,37 @@ int main(void) {
 					cli(); // Stop to Issue Interrupt
 					max_count_delay = 0;
 					volume_mask = 0x00;
-					volume_offset = VOLTAGE_BIAS;
-					noise_cycle = 0;
+					volume_offset = SEQUENCER_VOLTAGE_BIAS;
+					random_high_resolution = 0;
 					start_noise = 0;
 					is_start_sequence = 0;
 				}
 			}
 		} else { // If Not Match
-			button_1_sensitivity_count = BUTTON_SENSITIVITY;
+			button_1_sensitivity_count = SEQUENCER_BUTTON_SENSITIVITY;
 		}
 		if ( (PINB ^ pin_button_2) & pin_button_2 ) { // If Match
 			if ( ! --button_2_sensitivity_count ) { // If Count Reaches Zero
-				button_2_sensitivity_count = BUTTON_SENSITIVITY;
+				button_2_sensitivity_count = SEQUENCER_BUTTON_SENSITIVITY;
 				if ( ++sequencer_interval_index >= SEQUENCER_INTERVAL_NUMBER ) sequencer_interval_index = 0;
 				sequencer_interval_max = pgm_read_word(&(sequencer_interval_array[sequencer_interval_index]));
 			}
 		} else { // If Not Match
-			button_2_sensitivity_count = BUTTON_SENSITIVITY;
+			button_2_sensitivity_count = SEQUENCER_BUTTON_SENSITIVITY;
 		}
 		if ( sequencer_count_update != sequencer_count_last ) {
 			if ( sequencer_count_update > SEQUENCER_COUNTUPTO ) { // If Count Reaches Last
 				sequencer_count_update = 1;
 			}
 			sequencer_count_last = sequencer_count_update;
-			sequencer_byte = pgm_read_byte(&(sequencer_array[sequencer_array_index][sequencer_count_last - 1]));
+			sequencer_byte = pgm_read_byte(&(sequencer_program_array[sequencer_program_index][sequencer_count_last - 1]));
 			max_count_delay = pgm_read_word(&(sequencer_delay_time_array[sequencer_byte & 0xF]));
 			volume_mask = pgm_read_byte(&(sequencer_volume_mask_array[(sequencer_byte & 0x70) >> 4]));
 			volume_offset = pgm_read_byte(&(sequencer_volume_offset_array[(sequencer_byte & 0x70) >> 4]));
-			noise_cycle = sequencer_byte & 0x80;
+			random_high_resolution = sequencer_byte & 0x80;
 		}
 		if ( count_delay > max_count_delay ) {
-			if ( start_noise ) random_make( noise_cycle );
+			if ( start_noise ) random_make( random_high_resolution );
 			count_delay = 0;
 			OCR0A = (random_value & volume_mask) + volume_offset;
 		}
@@ -255,6 +254,6 @@ ISR(TIM0_OVF_vect) {
 	}
 }
 
-inline void random_make( uint8_t bool_high ) { // The inline attribute doesn't make a call, but implants codes.
-	random_value = (random_value >> 1)|((((random_value & 0x2) >> 1)^(random_value & 0x1)) << (bool_high ? 14 : 6));
+inline void random_make( uint8_t high_resolution ) { // The inline attribute doesn't make a call, but implants codes.
+	random_value = (random_value >> 1)|((((random_value & 0x2) >> 1)^(random_value & 0x1)) << (high_resolution ? 14 : 6));
 }

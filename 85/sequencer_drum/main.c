@@ -23,8 +23,8 @@
  *     0b1: Sequence Index No. 1
  *
  * Button 1 from PB2, Start/Stop Sequence
- * PB3 is reserved as a digital input (pulled-up).
- * Button 2 from PB4, Push by Detecting Low to Change Beats per Second
+ * Button 2 from PB2, Change Output Level
+ * Button 3 from PB4, Push by Detecting Low to Change Beats per Second
  */
 
 #define RANDOM_INIT 0x4000 // Initial Value to Making Random Value, Must Be Non-zero
@@ -35,10 +35,11 @@ uint16_t random_value;
 #define SEQUENCER_SAMPLE_RATE (double)(F_CPU / 256) // 31250 Samples per Seconds
 #define SEQUENCER_INTERVAL_NUMBER 9
 #define SEQUENCER_INTERVAL_INDEX_DEFAULT 0
-#define SEQUENCER_COUNTUPTO 64
-#define SEQUENCER_LENGTH 2 // Length of Sequence
+#define SEQUENCER_PROGRAM_COUNTUPTO 64
+#define SEQUENCER_PROGRAM_LENGTH 2 // Length of Sequence
+#define SEQUENCER_LEVEL_SHIFT_MAX 3
 #define SEQUENCER_INPUT_SENSITIVITY 250 // Less Number, More Sensitive (Except 0: Lowest Sensitivity)
-#define SEQUENCER_BUTTON_SENSITIVITY 2500 // Less Number, More Sensitive (Except 0: Lowest Sensitivity)
+#define SEQUENCER_BUTTON_SENSITIVITY 10000 // Less Number, More Sensitive (Except 0: Lowest Sensitivity)
 
 /* Global Variables without Initialization to Define at .bss Section and Squash .data Section */
 
@@ -107,7 +108,7 @@ uint8_t const sequencer_volume_offset_array[8] PROGMEM = { // Array in Program S
  * Bit[6:4]: Index of sequencer_volume_mask_array and sequencer_volume_offset_array (0-7)
  * Bit[7]: 0 as 7-bit LFSR-2, 1 as 15-bit LFSR-2
  */
-uint8_t const sequencer_program_array[SEQUENCER_LENGTH][SEQUENCER_COUNTUPTO] PROGMEM = { // Array in Program Space
+uint8_t const sequencer_program_array[SEQUENCER_PROGRAM_LENGTH][SEQUENCER_PROGRAM_COUNTUPTO] PROGMEM = { // Array in Program Space
 	{0xB4,0x00,0xB4,0x00,0xB4,0x00,0xB4,0x00,0xB4,0x00,0xB4,0x00,0xB4,0x00,0xB4,0x00,
 	 0x98,0x00,0x00,0x00,0x98,0x00,0x00,0x00,0x98,0x00,0x00,0x00,0x98,0x00,0x00,0x00,
 	 0xB4,0x00,0xB4,0x00,0xB4,0x00,0xB4,0x00,0xB4,0x00,0xB4,0x00,0xB4,0x00,0xB4,0x00,
@@ -124,13 +125,14 @@ int main(void) {
 	uint8_t const pin_input = _BV(PINB1);
 	uint8_t const pin_input_shift = PINB1;
 	uint8_t const pin_button_1 = _BV(PINB2);
-	uint8_t const pin_button_2 = _BV(PINB4);
+	uint8_t const pin_button_2 = _BV(PINB3);
+	uint8_t const pin_button_3 = _BV(PINB4);
 	uint16_t count_delay;
 	uint16_t max_count_delay;
 	uint8_t volume_mask;
 	uint8_t volume_offset;
 	uint8_t random_high_resolution;
-	uint8_t start_noise;
+	uint8_t is_start_noise;
 	uint16_t sequencer_count_last = 0;
 	uint8_t input_pin;
 	uint8_t input_pin_last = 0;
@@ -141,7 +143,9 @@ int main(void) {
 	uint16_t input_sensitivity_count = SEQUENCER_INPUT_SENSITIVITY;
 	uint16_t button_1_sensitivity_count = SEQUENCER_BUTTON_SENSITIVITY;
 	uint16_t button_2_sensitivity_count = SEQUENCER_BUTTON_SENSITIVITY;
+	uint16_t button_3_sensitivity_count = SEQUENCER_BUTTON_SENSITIVITY;
 	uint8_t is_start_sequence = 0;
+	uint8_t sequencer_level_shift = 0;
 
 	/* Initialize Global Variables */
 	sequencer_interval_max = pgm_read_word(&(sequencer_interval_array[SEQUENCER_INTERVAL_INDEX_DEFAULT]));
@@ -177,11 +181,11 @@ int main(void) {
 	volume_mask = 0x00;
 	volume_offset = SEQUENCER_VOLTAGE_BIAS;
 	random_high_resolution = 0;
-	start_noise = 0;
+	is_start_noise = 0;
 
 	while(1) {
 		input_pin = ((PINB ^ pin_input) & pin_input) >> pin_input_shift;
-		if ( input_pin >= SEQUENCER_LENGTH ) input_pin = SEQUENCER_LENGTH - 1;
+		if ( input_pin >= SEQUENCER_PROGRAM_LENGTH ) input_pin = SEQUENCER_PROGRAM_LENGTH - 1;
 		if ( input_pin == input_pin_last ) { // If Match
 			if ( ! --input_sensitivity_count ) { // If Count Reaches Zero
 				sequencer_program_index = input_pin_last;
@@ -200,7 +204,7 @@ int main(void) {
 					sequencer_count_last = 0;
 					random_value = RANDOM_INIT; // Reset Random Value
 					TIFR |= _BV(TOV0); // Clear Set Timer/Counter0 Overflow Flag by Logic One
-					if ( ! start_noise ) start_noise = 1;
+					if ( ! is_start_noise ) is_start_noise = 1;
 					if ( ! (SREG & _BV(SREG_I)) ) sei(); // If Global Interrupt Enable Flag Is Not Set, Start to Issue Interrupt
 					is_start_sequence = 1;
 				} else {
@@ -209,7 +213,7 @@ int main(void) {
 					volume_mask = 0x00;
 					volume_offset = SEQUENCER_VOLTAGE_BIAS;
 					random_high_resolution = 0;
-					start_noise = 0;
+					is_start_noise = 0;
 					is_start_sequence = 0;
 				}
 			}
@@ -219,14 +223,22 @@ int main(void) {
 		if ( (PINB ^ pin_button_2) & pin_button_2 ) { // If Match
 			if ( ! --button_2_sensitivity_count ) { // If Count Reaches Zero
 				button_2_sensitivity_count = SEQUENCER_BUTTON_SENSITIVITY;
-				if ( ++sequencer_interval_index >= SEQUENCER_INTERVAL_NUMBER ) sequencer_interval_index = 0;
-				sequencer_interval_max = pgm_read_word(&(sequencer_interval_array[sequencer_interval_index]));
+				if ( ++sequencer_level_shift > SEQUENCER_LEVEL_SHIFT_MAX ) sequencer_level_shift = 0;
 			}
 		} else { // If Not Match
 			button_2_sensitivity_count = SEQUENCER_BUTTON_SENSITIVITY;
 		}
+		if ( (PINB ^ pin_button_3) & pin_button_3 ) { // If Match
+			if ( ! --button_3_sensitivity_count ) { // If Count Reaches Zero
+				button_3_sensitivity_count = SEQUENCER_BUTTON_SENSITIVITY;
+				if ( ++sequencer_interval_index >= SEQUENCER_INTERVAL_NUMBER ) sequencer_interval_index = 0;
+				sequencer_interval_max = pgm_read_word(&(sequencer_interval_array[sequencer_interval_index]));
+			}
+		} else { // If Not Match
+			button_3_sensitivity_count = SEQUENCER_BUTTON_SENSITIVITY;
+		}
 		if ( sequencer_count_update != sequencer_count_last ) {
-			if ( sequencer_count_update > SEQUENCER_COUNTUPTO ) { // If Count Reaches Last
+			if ( sequencer_count_update > SEQUENCER_PROGRAM_COUNTUPTO ) { // If Count Reaches Last
 				sequencer_count_update = 1;
 			}
 			sequencer_count_last = sequencer_count_update;
@@ -237,9 +249,9 @@ int main(void) {
 			random_high_resolution = sequencer_byte & 0x80;
 		}
 		if ( count_delay > max_count_delay ) {
-			if ( start_noise ) random_make( random_high_resolution );
+			if ( is_start_noise ) random_make( random_high_resolution );
 			count_delay = 0;
-			OCR0A = (random_value & volume_mask) + volume_offset;
+			OCR0A = (uint8_t)((((int16_t)((random_value & volume_mask) + volume_offset) - SEQUENCER_VOLTAGE_BIAS) >> sequencer_level_shift) + SEQUENCER_VOLTAGE_BIAS);
 		}
 		count_delay++;
 	}

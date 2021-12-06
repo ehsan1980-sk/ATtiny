@@ -37,8 +37,8 @@ uint16_t random_value;
 #define SEQUENCER_VOLTAGE_BIAS 0x80 // Decimal 128 on Noise Off
 #define SEQUENCER_SAMPLE_RATE (double)(F_CPU / 256) // 37500 Samples per Seconds
 #define SEQUENCER_INTERVAL 250 // Approx. 150Hz = 0.0067 Seconds
-#define SEQUENCER_COUNTUPTO 64 // 0.0067 Seconds * 64
-#define SEQUENCER_SEQUENCENUMBER 5 // Maximum Number of Sequence
+#define SEQUENCER_PROGRAM_COUNTUPTO 64 // 0.0067 Seconds * 64
+#define SEQUENCER_PROGRAM_LENGTH 5 // Maximum Number of Sequence
 #define SEQUENCER_INPUT_SENSITIVITY 250 // Less Number, More Sensitive (Except 0: Lowest Sensitivity)
 
 /* Global Variables without Initialization to Define at .bss Section and Squash .data Section */
@@ -94,7 +94,7 @@ uint8_t const sequencer_volume_offset_array[8] PROGMEM = { // Array in Program S
  * Bit[6:4]: Index of sequencer_volume_mask_array and sequencer_volume_offset_array (0-7)
  * Bit[7]: 0 as 7-bit LFSR-2, 1 as 15-bit LFSR-2
  */
-uint8_t const sequencer_program_array[SEQUENCER_SEQUENCENUMBER][SEQUENCER_COUNTUPTO] PROGMEM = { // Array in Program Space
+uint8_t const sequencer_program_array[SEQUENCER_PROGRAM_LENGTH][SEQUENCER_PROGRAM_COUNTUPTO] PROGMEM = { // Array in Program Space
 	{0x90,0xA0,0xB0,0xC0,0xD0,0xE0,0xF0,0xF0,0xC0,0xC0,0xC0,0xC0,0xC0,0xC0,0xC0,0xC0,
 	 0xB0,0xB0,0xB0,0xB0,0xB0,0xB0,0xB0,0xB0,0xA0,0xA0,0xA0,0xA0,0xA0,0xA0,0xA0,0xA0,
 	 0x90,0x90,0x90,0x90,0x90,0x90,0x90,0x90,0x80,0x80,0x80,0x80,0x80,0x80,0x80,0x80,
@@ -127,7 +127,7 @@ int main(void) {
 	uint8_t volume_mask;
 	uint8_t volume_offset;
 	uint8_t random_high_resolution;
-	uint8_t start_noise;
+	uint8_t is_start_noise;
 	uint16_t sequencer_count_last = 0;
 	uint8_t input_pin;
 	uint8_t input_pin_last = 0;
@@ -170,11 +170,11 @@ int main(void) {
 	volume_mask = 0x00;
 	volume_offset = SEQUENCER_VOLTAGE_BIAS;
 	random_high_resolution = 0;
-	start_noise = 0;
+	is_start_noise = 0;
 
 	while(1) {
 		input_pin = ((PINB ^ pin_input) & pin_input) >> pin_input_shift;
-		if ( input_pin >= SEQUENCER_SEQUENCENUMBER ) input_pin = SEQUENCER_SEQUENCENUMBER;
+		if ( input_pin > SEQUENCER_PROGRAM_LENGTH ) input_pin = SEQUENCER_PROGRAM_LENGTH;
 		if ( input_pin == input_pin_last ) { // If Match
 			if ( ! --input_sensitivity_count ) { // If Count Reaches Zero
 				input_pin_buffer = input_pin;
@@ -193,17 +193,17 @@ int main(void) {
 				sequencer_count_last = 0;
 				random_value = RANDOM_INIT; // Reset Random Value
 				TIFR0 |= _BV(TOV0); // Clear Set Timer/Counter0 Overflow Flag by Logic One
-				if ( ! start_noise ) start_noise = 1;
+				if ( ! is_start_noise ) is_start_noise = 1;
 				if ( ! (SREG & _BV(SREG_I)) ) sei(); // If Global Interrupt Enable Flag Is Not Set, Start to Issue Interrupt
 			}
 		}
 		if ( sequencer_count_update != sequencer_count_last ) {
-			if ( sequencer_count_update > SEQUENCER_COUNTUPTO ) { // If Count Reaches Last
-				sequencer_count_update = SEQUENCER_COUNTUPTO + 1;
+			if ( sequencer_count_update > SEQUENCER_PROGRAM_COUNTUPTO ) { // If Count Reaches Last
+				sequencer_count_update = SEQUENCER_PROGRAM_COUNTUPTO + 1;
 				cli(); // Stop to Issue Interrupt
 			}
 			sequencer_count_last = sequencer_count_update;
-			if ( sequencer_count_last <= SEQUENCER_COUNTUPTO ) {
+			if ( sequencer_count_last <= SEQUENCER_PROGRAM_COUNTUPTO ) {
 				sequencer_byte = pgm_read_byte(&(sequencer_program_array[sequencer_program_index][sequencer_count_last - 1]));
 				max_count_delay = pgm_read_word(&(sequencer_delay_time_array[sequencer_byte & 0xF]));
 				volume_mask = pgm_read_byte(&(sequencer_volume_mask_array[(sequencer_byte & 0x70) >> 4]));
@@ -214,11 +214,11 @@ int main(void) {
 				volume_mask = 0x00;
 				volume_offset = SEQUENCER_VOLTAGE_BIAS;
 				random_high_resolution = 0;
-				start_noise = 0;
+				is_start_noise = 0;
 			}
 		}
 		if ( count_delay > max_count_delay ) {
-			if ( start_noise ) random_make( random_high_resolution );
+			if ( is_start_noise ) random_make( random_high_resolution );
 			count_delay = 0;
 			OCR0A = (random_value & volume_mask) + volume_offset;
 		}

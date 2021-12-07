@@ -39,7 +39,7 @@ uint16_t random_value;
 #define SEQUENCER_PROGRAM_LENGTH 2 // Length of Sequence
 #define SEQUENCER_LEVEL_SHIFT_MAX 3
 #define SEQUENCER_INPUT_SENSITIVITY 250 // Less Number, More Sensitive (Except 0: Lowest Sensitivity)
-#define SEQUENCER_BUTTON_SENSITIVITY 10000 // Less Number, More Sensitive (Except 0: Lowest Sensitivity)
+#define SEQUENCER_BUTTON_SENSITIVITY 2500 // Less Number, More Sensitive (Except 0: Lowest Sensitivity)
 
 /* Global Variables without Initialization to Define at .bss Section and Squash .data Section */
 
@@ -109,10 +109,10 @@ uint8_t const sequencer_volume_offset_array[8] PROGMEM = { // Array in Program S
  * Bit[7]: 0 as 7-bit LFSR-2, 1 as 15-bit LFSR-2
  */
 uint8_t const sequencer_program_array[SEQUENCER_PROGRAM_LENGTH][SEQUENCER_PROGRAM_COUNTUPTO] PROGMEM = { // Array in Program Space
-	{0xB4,0x00,0xB4,0x00,0xB4,0x00,0xB4,0x00,0xB4,0x00,0xB4,0x00,0xB4,0x00,0xB4,0x00,
-	 0x98,0x00,0x00,0x00,0x98,0x00,0x00,0x00,0x98,0x00,0x00,0x00,0x98,0x00,0x00,0x00,
-	 0xB4,0x00,0xB4,0x00,0xB4,0x00,0xB4,0x00,0xB4,0x00,0xB4,0x00,0xB4,0x00,0xB4,0x00,
-	 0x98,0x00,0x00,0x00,0x98,0x00,0x00,0x00,0x98,0x00,0x00,0x00,0x98,0x00,0x00,0x00}, // Sequence Index No. 0
+	{0xC0,0x00,0xC1,0x00,0xC2,0x00,0xC3,0x00,0xC4,0x00,0xC4,0x00,0xC6,0x00,0xC7,0x00,
+	 0xC8,0x00,0xC9,0x00,0xCA,0x00,0xCB,0x00,0xCC,0x00,0xCD,0x00,0xCE,0x00,0xCF,0x00,
+	 0xF0,0x00,0xF1,0x00,0xF2,0x00,0xF3,0x00,0xF4,0x00,0xF4,0x00,0xF6,0x00,0xF7,0x00,
+	 0xF8,0x00,0xF9,0x00,0xFA,0x00,0xFB,0x00,0xFC,0x00,0xFD,0x00,0xFE,0x00,0xFF,0x00}, // Sequence Index No. 0
 	{0x90,0xA0,0xB0,0xC0,0xD0,0xE0,0xF0,0xF0,0xC2,0xC2,0xC2,0xC2,0xC2,0xC2,0xC2,0xC2,
 	 0xB4,0xB4,0xB4,0xB4,0xB4,0xB4,0xB4,0xB4,0xB4,0xB4,0xB4,0xB4,0xB4,0xB4,0xB4,0xB4,
 	 0xA6,0xA6,0xA6,0xA6,0xA6,0xA6,0xA6,0xA6,0xA6,0xA6,0xA6,0xA6,0xA6,0xA6,0xA6,0xA6,
@@ -141,9 +141,9 @@ int main(void) {
 	uint8_t sequencer_byte;
 	uint8_t osccal_default; // Calibrated Default Value of OSCCAL
 	uint16_t input_sensitivity_count = SEQUENCER_INPUT_SENSITIVITY;
-	uint16_t button_1_sensitivity_count = SEQUENCER_BUTTON_SENSITIVITY;
-	uint16_t button_2_sensitivity_count = SEQUENCER_BUTTON_SENSITIVITY;
-	uint16_t button_3_sensitivity_count = SEQUENCER_BUTTON_SENSITIVITY;
+	int16_t button_1_sensitivity_count = SEQUENCER_BUTTON_SENSITIVITY;
+	int16_t button_2_sensitivity_count = SEQUENCER_BUTTON_SENSITIVITY;
+	int16_t button_3_sensitivity_count = SEQUENCER_BUTTON_SENSITIVITY;
 	uint8_t is_start_sequence = 0;
 	uint8_t sequencer_level_shift = 0;
 
@@ -196,43 +196,49 @@ int main(void) {
 			input_sensitivity_count = SEQUENCER_INPUT_SENSITIVITY;
 		}
 		if ( (PINB ^ pin_button_1) & pin_button_1 ) { // If Match
-			if ( ! --button_1_sensitivity_count ) { // If Count Reaches Zero
-				button_1_sensitivity_count = SEQUENCER_BUTTON_SENSITIVITY;
-				if ( ! is_start_sequence ) {
-					sequencer_interval_count = 0;
-					sequencer_count_update = 1;
-					sequencer_count_last = 0;
-					random_value = RANDOM_INIT; // Reset Random Value
-					TIFR |= _BV(TOV0); // Clear Set Timer/Counter0 Overflow Flag by Logic One
-					if ( ! is_start_noise ) is_start_noise = 1;
-					if ( ! (SREG & _BV(SREG_I)) ) sei(); // If Global Interrupt Enable Flag Is Not Set, Start to Issue Interrupt
-					is_start_sequence = 1;
-				} else {
-					cli(); // Stop to Issue Interrupt
-					max_count_delay = 0;
-					volume_mask = 0x00;
-					volume_offset = SEQUENCER_VOLTAGE_BIAS;
-					random_high_resolution = 0;
-					is_start_noise = 0;
-					is_start_sequence = 0;
-				}
+			if ( button_1_sensitivity_count >= 0 ) {
+				button_1_sensitivity_count--;
+				if ( button_1_sensitivity_count == 0 ) { // If Count Reaches Zero
+					if ( ! is_start_sequence ) {
+						sequencer_interval_count = 0;
+						sequencer_count_update = 1;
+						sequencer_count_last = 0;
+						random_value = RANDOM_INIT; // Reset Random Value
+						TIFR |= _BV(TOV0); // Clear Set Timer/Counter0 Overflow Flag by Logic One
+						if ( ! is_start_noise ) is_start_noise = 1;
+						if ( ! (SREG & _BV(SREG_I)) ) sei(); // If Global Interrupt Enable Flag Is Not Set, Start to Issue Interrupt
+						is_start_sequence = 1;
+					} else {
+						cli(); // Stop to Issue Interrupt
+						max_count_delay = 0;
+						volume_mask = 0x00;
+						volume_offset = SEQUENCER_VOLTAGE_BIAS;
+						random_high_resolution = 0;
+						is_start_noise = 0;
+						is_start_sequence = 0;
+					}
+				} // If Count Reaches -1, Do Nothing
 			}
 		} else { // If Not Match
 			button_1_sensitivity_count = SEQUENCER_BUTTON_SENSITIVITY;
 		}
 		if ( (PINB ^ pin_button_2) & pin_button_2 ) { // If Match
-			if ( ! --button_2_sensitivity_count ) { // If Count Reaches Zero
-				button_2_sensitivity_count = SEQUENCER_BUTTON_SENSITIVITY;
-				if ( ++sequencer_level_shift > SEQUENCER_LEVEL_SHIFT_MAX ) sequencer_level_shift = 0;
+			if ( button_2_sensitivity_count >= 0 ) {
+				button_2_sensitivity_count--;
+				if ( button_2_sensitivity_count == 0 ) { // If Count Reaches Zero
+					if ( ++sequencer_level_shift > SEQUENCER_LEVEL_SHIFT_MAX ) sequencer_level_shift = 0;
+				} // If Count Reaches -1, Do Nothing
 			}
 		} else { // If Not Match
 			button_2_sensitivity_count = SEQUENCER_BUTTON_SENSITIVITY;
 		}
 		if ( (PINB ^ pin_button_3) & pin_button_3 ) { // If Match
-			if ( ! --button_3_sensitivity_count ) { // If Count Reaches Zero
-				button_3_sensitivity_count = SEQUENCER_BUTTON_SENSITIVITY;
-				if ( ++sequencer_interval_index >= SEQUENCER_INTERVAL_NUMBER ) sequencer_interval_index = 0;
-				sequencer_interval_max = pgm_read_word(&(sequencer_interval_array[sequencer_interval_index]));
+			if ( button_3_sensitivity_count >= 0 ) {
+				button_3_sensitivity_count--;
+				if ( button_3_sensitivity_count == 0 ) { // If Count Reaches Zero
+					if ( ++sequencer_interval_index >= SEQUENCER_INTERVAL_NUMBER ) sequencer_interval_index = 0;
+					sequencer_interval_max = pgm_read_word(&(sequencer_interval_array[sequencer_interval_index]));
+				} // If Count Reaches -1, Do Nothing
 			}
 		} else { // If Not Match
 			button_3_sensitivity_count = SEQUENCER_BUTTON_SENSITIVITY;

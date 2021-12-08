@@ -38,59 +38,61 @@ uint16_t random_value;
 #define SEQUENCER_SAMPLE_RATE (double)(F_CPU / 256) // 37500 Samples per Seconds
 #define SEQUENCER_INTERVAL 250 // Approx. 150Hz = 0.0067 Seconds
 #define SEQUENCER_PROGRAM_COUNTUPTO 64 // 0.0067 Seconds * 64
-#define SEQUENCER_PROGRAM_LENGTH 5 // Maximum Number of Sequence
+#define SEQUENCER_PROGRAM_LENGTH 4 // Maximum Number of Sequence
 #define SEQUENCER_INPUT_SENSITIVITY 250 // Less Number, More Sensitive (Except 0: Lowest Sensitivity)
 
 /* Global Variables without Initialization to Define at .bss Section and Squash .data Section */
 
 uint16_t sequencer_interval_count;
 uint16_t sequencer_count_update;
-uint8_t sequencer_volume;
+uint16_t sequencer_interval_random;
+uint16_t sequencer_interval_random_max;
+uint8_t sequencer_next_random;
 
 // Delay Time in Tunrs to Generate Next Random Value
-uint16_t const sequencer_delay_time_array[16] PROGMEM = { // Array in Program Space
-	0,
+uint16_t const sequencer_interval_random_max_array[16] PROGMEM = { // Array in Program Space
 	1,
 	2,
+	3,
 	4,
 	8,
 	16,
 	32,
 	64,
 	128,
+	192,
 	256,
+	384,
 	512,
+	768,
 	1024,
-	2048,
-	4096,
-	8192,
-	16384,
+	1536
 };
 
 uint8_t const sequencer_volume_mask_array[8] PROGMEM = { // Array in Program Space
 	0x00,
-	0x01, // Up to Decimal 1
-	0x03, // Up to Decimal 3
 	0x07, // Up to Decimal 7
 	0x0F, // Up to Decimal 15
 	0x1F, // Up to Decimal 31
 	0x3F, // Up to Decimal 63
-	0x7F  // Up to Decimal 127
+	0x7F, // Up to Decimal 127
+	0xBF, // Up to Decimal 191
+	0xFF // Up to Decimal 255
 };
 
 uint8_t const sequencer_volume_offset_array[8] PROGMEM = { // Array in Program Space
 	SEQUENCER_VOLTAGE_BIAS,
-	0x7F, // Decimal 127
-	0x7E, // Decimal 126
 	0x7C, // Decimal 124
 	0x78, // Decimal 120
 	0x70, // Decimal 112
 	0x60, // Decimal 96
-	0x40  // Decimal 64
+	0x40, // Decimal 64
+	0x20, // Decimal 32
+	0x00 // Decimal 0
 };
 
 /**
- * Bit[3:0]: Index of sequencer_delay_time_array (0-15)
+ * Bit[3:0]: Index of sequencer_interval_random_max_array (0-15)
  * Bit[6:4]: Index of sequencer_volume_mask_array and sequencer_volume_offset_array (0-7)
  * Bit[7]: 0 as 7-bit LFSR-2, 1 as 15-bit LFSR-2
  */
@@ -110,11 +112,7 @@ uint8_t const sequencer_program_array[SEQUENCER_PROGRAM_LENGTH][SEQUENCER_PROGRA
 	{0x10,0x20,0x30,0x40,0x50,0x60,0x70,0x70,0x40,0x40,0x40,0x40,0x40,0x40,0x40,0x40,
 	 0x30,0x30,0x30,0x30,0x30,0x30,0x30,0x30,0x30,0x30,0x30,0x30,0x30,0x30,0x30,0x30,
 	 0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,
-	 0x10,0x10,0x10,0x10,0x10,0x10,0x10,0x10,0x10,0x10,0x10,0x10,0x00,0x00,0x00,0x00}, // Sequence No.4
-	{0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-	 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-	 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-	 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00}  // Sequence No.5
+	 0x10,0x10,0x10,0x10,0x10,0x10,0x10,0x10,0x10,0x10,0x10,0x10,0x00,0x00,0x00,0x00} // Sequence No.4
 };
 
 int main(void) {
@@ -122,27 +120,26 @@ int main(void) {
 	/* Declare and Define Local Constants and Variables */
 	uint8_t const pin_input = _BV(PINB3)|_BV(PINB2)|_BV(PINB1); // Assign PB3, PB2 and PB1 as Trigger Bit[1:0]
 	uint8_t const pin_input_shift = PINB1;
-	uint16_t count_delay;
-	uint16_t max_count_delay;
-	uint8_t volume_mask;
-	uint8_t volume_offset;
-	uint8_t random_high_resolution;
-	uint8_t is_start_noise;
-	uint16_t sequencer_count_last = 0;
+	uint8_t volume_mask = 0x00;
+	uint8_t volume_offset = SEQUENCER_VOLTAGE_BIAS;
+	uint8_t random_high_resolution = 0;
+	uint16_t count_last = 0;
 	uint8_t input_pin;
 	uint8_t input_pin_last = 0;
 	uint8_t input_pin_buffer = 0;
 	uint8_t input_pin_buffer_last = 0;
-	uint8_t sequencer_program_index = 0;
-	uint8_t sequencer_byte;
+	uint8_t program_index = 0;
+	uint8_t program_byte;
 	uint8_t osccal_default; // Calibrated Default Value of OSCCAL
 	uint16_t input_sensitivity_count = SEQUENCER_INPUT_SENSITIVITY;
 
 	/* Initialize Global Variables */
+	random_value = RANDOM_INIT;
 	sequencer_interval_count = 0;
 	sequencer_count_update = 0;
-	sequencer_volume = SEQUENCER_VOLTAGE_BIAS;
-	random_value = RANDOM_INIT;
+	sequencer_interval_random = 0;
+	sequencer_interval_random_max = 0;
+	sequencer_next_random = 0;
 
 	/* Clock Calibration */
 	osccal_default = OSCCAL + CALIB_OSCCAL; // Frequency Calibration for Individual Difference at VCC = 3.3V
@@ -164,13 +161,6 @@ int main(void) {
 	TCCR0A = _BV(WGM01)|_BV(WGM00)|_BV(COM0A1);
 	// Start Counter with I/O-Clock 9.6MHz / ( 1 * 256 ) = 37500Hz
 	TCCR0B = _BV(CS00);
-	// Initialize Local Variables Before Loop
-	count_delay = 1; // For Process on First Turn
-	max_count_delay = 0;
-	volume_mask = 0x00;
-	volume_offset = SEQUENCER_VOLTAGE_BIAS;
-	random_high_resolution = 0;
-	is_start_noise = 0;
 
 	while(1) {
 		input_pin = ((PINB ^ pin_input) & pin_input) >> pin_input_shift;
@@ -187,42 +177,43 @@ int main(void) {
 		if ( input_pin_buffer != input_pin_buffer_last ) {
 			input_pin_buffer_last = input_pin_buffer;
 			if ( input_pin_buffer_last ) { // If Not Zero
-				sequencer_program_index = input_pin_buffer_last - 1;
+				program_index = input_pin_buffer_last - 1;
+				random_value = RANDOM_INIT; // Reset Random Value
 				sequencer_interval_count = 0;
 				sequencer_count_update = 1;
-				sequencer_count_last = 0;
-				random_value = RANDOM_INIT; // Reset Random Value
+				sequencer_interval_random = 0;
+				sequencer_interval_random_max = 0;
+				count_last = 0;
 				TIFR0 |= _BV(TOV0); // Clear Set Timer/Counter0 Overflow Flag by Logic One
-				if ( ! is_start_noise ) is_start_noise = 1;
 				if ( ! (SREG & _BV(SREG_I)) ) sei(); // If Global Interrupt Enable Flag Is Not Set, Start to Issue Interrupt
+			} else {
+				cli(); // Stop to Issue Interrupt
+				OCR0A = SEQUENCER_VOLTAGE_BIAS;
+				sequencer_next_random = 0;
 			}
 		}
-		if ( sequencer_count_update != sequencer_count_last ) {
+		if ( sequencer_count_update != count_last ) {
 			if ( sequencer_count_update > SEQUENCER_PROGRAM_COUNTUPTO ) { // If Count Reaches Last
 				sequencer_count_update = SEQUENCER_PROGRAM_COUNTUPTO + 1;
-				cli(); // Stop to Issue Interrupt
 			}
-			sequencer_count_last = sequencer_count_update;
-			if ( sequencer_count_last <= SEQUENCER_PROGRAM_COUNTUPTO ) {
-				sequencer_byte = pgm_read_byte(&(sequencer_program_array[sequencer_program_index][sequencer_count_last - 1]));
-				max_count_delay = pgm_read_word(&(sequencer_delay_time_array[sequencer_byte & 0xF]));
-				volume_mask = pgm_read_byte(&(sequencer_volume_mask_array[(sequencer_byte & 0x70) >> 4]));
-				volume_offset = pgm_read_byte(&(sequencer_volume_offset_array[(sequencer_byte & 0x70) >> 4]));
-				random_high_resolution = sequencer_byte & 0x80;
+			count_last = sequencer_count_update;
+			if ( count_last <= SEQUENCER_PROGRAM_COUNTUPTO ) {
+				program_byte = pgm_read_byte(&(sequencer_program_array[program_index][count_last - 1]));
+				sequencer_interval_random_max = pgm_read_word(&(sequencer_interval_random_max_array[program_byte & 0xF]));
+				volume_mask = pgm_read_byte(&(sequencer_volume_mask_array[(program_byte & 0x70) >> 4]));
+				volume_offset = pgm_read_byte(&(sequencer_volume_offset_array[(program_byte & 0x70) >> 4]));
+				random_high_resolution = program_byte & 0x80;
 			} else {
-				max_count_delay = 0;
-				volume_mask = 0x00;
-				volume_offset = SEQUENCER_VOLTAGE_BIAS;
-				random_high_resolution = 0;
-				is_start_noise = 0;
+				cli(); // Stop to Issue Interrupt
+				OCR0A = SEQUENCER_VOLTAGE_BIAS;
+				sequencer_next_random = 0;
 			}
 		}
-		if ( count_delay > max_count_delay ) {
-			if ( is_start_noise ) random_make( random_high_resolution );
-			count_delay = 0;
+		if ( sequencer_next_random ) {
+			random_make( random_high_resolution );
 			OCR0A = (random_value & volume_mask) + volume_offset;
+			sequencer_next_random = 0;
 		}
-		count_delay++;
 	}
 	return 0;
 }
@@ -232,6 +223,10 @@ ISR(TIM0_OVF_vect) {
 	if ( sequencer_interval_count >= SEQUENCER_INTERVAL ) {
 		sequencer_interval_count = 0;
 		sequencer_count_update++;
+	}
+	if ( ++sequencer_interval_random >= sequencer_interval_random_max ) {
+		sequencer_interval_random = 0;
+		sequencer_next_random = 1;
 	}
 }
 

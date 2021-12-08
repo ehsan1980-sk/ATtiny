@@ -47,6 +47,9 @@ uint16_t sequencer_interval_max;
 uint16_t sequencer_interval_count;
 uint16_t sequencer_count_update;
 uint8_t sequencer_volume;
+uint16_t sequencer_interval_random;
+uint16_t sequencer_interval_random_max;
+uint8_t sequencer_next_random;
 
 // Interval (31250 Divided by Beats in 1 Second)
 uint16_t const sequencer_interval_array[SEQUENCER_INTERVAL_NUMBER] PROGMEM = { // Array in Program Space
@@ -62,10 +65,10 @@ uint16_t const sequencer_interval_array[SEQUENCER_INTERVAL_NUMBER] PROGMEM = { /
 };
 
 // Delay Time in Turns to Generate Next Random Value
-uint16_t const sequencer_delay_time_array[16] PROGMEM = { // Array in Program Space
-	0,
+uint16_t const sequencer_interval_random_max_array[16] PROGMEM = { // Array in Program Space
 	1,
 	2,
+	3,
 	4,
 	8,
 	16,
@@ -104,7 +107,7 @@ uint8_t const sequencer_volume_offset_array[8] PROGMEM = { // Array in Program S
 };
 
 /**
- * Bit[3:0]: Index of sequencer_delay_time_array (0-15)
+ * Bit[3:0]: Index of sequencer_interval_random_max_array (0-15)
  * Bit[6:4]: Index of sequencer_volume_mask_array and sequencer_volume_offset_array (0-7)
  * Bit[7]: 0 as 7-bit LFSR-2, 1 as 15-bit LFSR-2
  */
@@ -127,33 +130,32 @@ int main(void) {
 	uint8_t const pin_button_1 = _BV(PINB2);
 	uint8_t const pin_button_2 = _BV(PINB3);
 	uint8_t const pin_button_3 = _BV(PINB4);
-	uint16_t count_delay;
-	uint16_t max_count_delay;
-	uint8_t volume_mask;
-	uint8_t volume_offset;
-	uint8_t random_high_resolution;
-	uint8_t is_start_noise;
-	uint16_t sequencer_count_last = 0;
+	uint8_t volume_mask = 0x00;
+	uint8_t volume_offset = SEQUENCER_VOLTAGE_BIAS;
+	uint8_t random_high_resolution = 0;
+	uint16_t count_last = 0;
 	uint8_t input_pin;
 	uint8_t input_pin_last = 0;
-	uint8_t sequencer_interval_index = 0;
-	uint8_t sequencer_program_index = 0;
-	uint8_t sequencer_byte;
+	uint8_t interval_index = SEQUENCER_INTERVAL_INDEX_DEFAULT;
+	uint8_t program_index = 0;
+	uint8_t program_byte;
 	uint8_t osccal_default; // Calibrated Default Value of OSCCAL
 	uint16_t input_sensitivity_count = SEQUENCER_INPUT_SENSITIVITY;
 	int16_t button_1_sensitivity_count = SEQUENCER_BUTTON_SENSITIVITY;
 	int16_t button_2_sensitivity_count = SEQUENCER_BUTTON_SENSITIVITY;
 	int16_t button_3_sensitivity_count = SEQUENCER_BUTTON_SENSITIVITY;
 	uint8_t is_start_sequence = 0;
-	uint8_t sequencer_level_shift = 0;
+	uint8_t level_shift = 0;
 
 	/* Initialize Global Variables */
-	sequencer_interval_max = pgm_read_word(&(sequencer_interval_array[SEQUENCER_INTERVAL_INDEX_DEFAULT]));
-	sequencer_interval_index = SEQUENCER_INTERVAL_INDEX_DEFAULT;
+	random_value = RANDOM_INIT;
+	sequencer_interval_max = pgm_read_word(&(sequencer_interval_array[interval_index]));
 	sequencer_interval_count = 0;
 	sequencer_count_update = 0;
 	sequencer_volume = SEQUENCER_VOLTAGE_BIAS;
-	random_value = RANDOM_INIT;
+	sequencer_interval_random = 0;
+	sequencer_interval_random_max = 0;
+	sequencer_next_random = 0;
 
 	/* Clock Calibration */
 	osccal_default = OSCCAL + CALIB_OSCCAL; // Frequency Calibration for Individual Difference at VCC = 3.0V
@@ -175,20 +177,13 @@ int main(void) {
 	TCCR0A = _BV(WGM01)|_BV(WGM00)|_BV(COM0A1);
 	// Start Counter with I/O-Clock 6.4MHz / ( 1 * 256 ) = 25000Hz
 	TCCR0B = _BV(CS00);
-	// Initialize Local Variables Before Loop
-	count_delay = 1; // For Process on First Turn
-	max_count_delay = 0;
-	volume_mask = 0x00;
-	volume_offset = SEQUENCER_VOLTAGE_BIAS;
-	random_high_resolution = 0;
-	is_start_noise = 0;
 
 	while(1) {
 		input_pin = ((PINB ^ pin_input) & pin_input) >> pin_input_shift;
 		if ( input_pin >= SEQUENCER_PROGRAM_LENGTH ) input_pin = SEQUENCER_PROGRAM_LENGTH - 1;
 		if ( input_pin == input_pin_last ) { // If Match
 			if ( ! --input_sensitivity_count ) { // If Count Reaches Zero
-				sequencer_program_index = input_pin_last;
+				program_index = input_pin_last;
 				input_sensitivity_count = SEQUENCER_INPUT_SENSITIVITY;
 			}
 		} else { // If Not Match
@@ -202,19 +197,19 @@ int main(void) {
 					if ( ! is_start_sequence ) {
 						sequencer_interval_count = 0;
 						sequencer_count_update = 1;
-						sequencer_count_last = 0;
-						random_value = RANDOM_INIT; // Reset Random Value
+						count_last = 0;
 						TIFR |= _BV(TOV0); // Clear Set Timer/Counter0 Overflow Flag by Logic One
-						if ( ! is_start_noise ) is_start_noise = 1;
 						if ( ! (SREG & _BV(SREG_I)) ) sei(); // If Global Interrupt Enable Flag Is Not Set, Start to Issue Interrupt
 						is_start_sequence = 1;
 					} else {
 						cli(); // Stop to Issue Interrupt
-						max_count_delay = 0;
+						random_value = RANDOM_INIT; // Reset Random Value
 						volume_mask = 0x00;
 						volume_offset = SEQUENCER_VOLTAGE_BIAS;
 						random_high_resolution = 0;
-						is_start_noise = 0;
+						sequencer_interval_random = 0;
+						sequencer_interval_random_max = 0;
+						sequencer_next_random = 0;
 						is_start_sequence = 0;
 					}
 				} // If Count Reaches -1, Do Nothing
@@ -222,11 +217,27 @@ int main(void) {
 		} else { // If Not Match
 			button_1_sensitivity_count = SEQUENCER_BUTTON_SENSITIVITY;
 		}
+		if ( sequencer_count_update != count_last ) {
+			if ( sequencer_count_update > SEQUENCER_PROGRAM_COUNTUPTO ) { // If Count Reaches Last
+				sequencer_count_update = 1;
+			}
+			count_last = sequencer_count_update;
+			program_byte = pgm_read_byte(&(sequencer_program_array[program_index][count_last - 1]));
+			sequencer_interval_random_max = pgm_read_word(&(sequencer_interval_random_max_array[program_byte & 0xF]));
+			volume_mask = pgm_read_byte(&(sequencer_volume_mask_array[(program_byte & 0x70) >> 4]));
+			volume_offset = pgm_read_byte(&(sequencer_volume_offset_array[(program_byte & 0x70) >> 4]));
+			random_high_resolution = program_byte & 0x80;
+		}
+		if ( sequencer_next_random ) {
+			random_make( random_high_resolution );
+			OCR0A = (uint8_t)((((int16_t)((random_value & volume_mask) + volume_offset) - SEQUENCER_VOLTAGE_BIAS) >> level_shift) + SEQUENCER_VOLTAGE_BIAS);
+			sequencer_next_random = 0;
+		}
 		if ( (PINB ^ pin_button_2) & pin_button_2 ) { // If Match
 			if ( button_2_sensitivity_count >= 0 ) {
 				button_2_sensitivity_count--;
 				if ( button_2_sensitivity_count == 0 ) { // If Count Reaches Zero
-					if ( ++sequencer_level_shift > SEQUENCER_LEVEL_SHIFT_MAX ) sequencer_level_shift = 0;
+					if ( ++level_shift > SEQUENCER_LEVEL_SHIFT_MAX ) level_shift = 0;
 				} // If Count Reaches -1, Do Nothing
 			}
 		} else { // If Not Match
@@ -236,30 +247,13 @@ int main(void) {
 			if ( button_3_sensitivity_count >= 0 ) {
 				button_3_sensitivity_count--;
 				if ( button_3_sensitivity_count == 0 ) { // If Count Reaches Zero
-					if ( ++sequencer_interval_index >= SEQUENCER_INTERVAL_NUMBER ) sequencer_interval_index = 0;
-					sequencer_interval_max = pgm_read_word(&(sequencer_interval_array[sequencer_interval_index]));
+					if ( ++interval_index >= SEQUENCER_INTERVAL_NUMBER ) interval_index = 0;
+					sequencer_interval_max = pgm_read_word(&(sequencer_interval_array[interval_index]));
 				} // If Count Reaches -1, Do Nothing
 			}
 		} else { // If Not Match
 			button_3_sensitivity_count = SEQUENCER_BUTTON_SENSITIVITY;
 		}
-		if ( sequencer_count_update != sequencer_count_last ) {
-			if ( sequencer_count_update > SEQUENCER_PROGRAM_COUNTUPTO ) { // If Count Reaches Last
-				sequencer_count_update = 1;
-			}
-			sequencer_count_last = sequencer_count_update;
-			sequencer_byte = pgm_read_byte(&(sequencer_program_array[sequencer_program_index][sequencer_count_last - 1]));
-			max_count_delay = pgm_read_word(&(sequencer_delay_time_array[sequencer_byte & 0xF]));
-			volume_mask = pgm_read_byte(&(sequencer_volume_mask_array[(sequencer_byte & 0x70) >> 4]));
-			volume_offset = pgm_read_byte(&(sequencer_volume_offset_array[(sequencer_byte & 0x70) >> 4]));
-			random_high_resolution = sequencer_byte & 0x80;
-		}
-		if ( count_delay > max_count_delay ) {
-			if ( is_start_noise ) random_make( random_high_resolution );
-			count_delay = 0;
-			OCR0A = (uint8_t)((((int16_t)((random_value & volume_mask) + volume_offset) - SEQUENCER_VOLTAGE_BIAS) >> sequencer_level_shift) + SEQUENCER_VOLTAGE_BIAS);
-		}
-		count_delay++;
 	}
 	return 0;
 }
@@ -269,6 +263,10 @@ ISR(TIM0_OVF_vect) {
 	if ( sequencer_interval_count >= sequencer_interval_max ) {
 		sequencer_interval_count = 0;
 		sequencer_count_update++;
+	}
+	if ( ++sequencer_interval_random >= sequencer_interval_random_max ) {
+		sequencer_interval_random = 0;
+		sequencer_next_random = 1;
 	}
 }
 

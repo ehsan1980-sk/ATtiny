@@ -16,15 +16,13 @@
 #define CALIB_OSCCAL 0x00 // Frequency Calibration for Individual Difference at VCC = 3.0V
 
 /**
- * Output from PB0 (OC0A)
- * Input from PB1 (Trigger Bit[0]), Set by Detecting Low
- * Trigger Bit[0]:
- *     0b0: Sequence Index No. 0
- *     0b1: Sequence Index No. 1
- *
- * Button 1 from PB2, Start/Stop Sequence
- * Button 2 from PB2, Change Output Level
- * Button 3 from PB4, Push by Detecting Low to Change Beats per Second
+ * PWM Output (OC0A): PB0 (DC Biased)
+ * Input Bit[0]: PB1 (Pulled Up, Set by Detecting Low)
+ *   0b0: Sequence Index No. 0
+ *   0b1: Sequence Index No. 1
+ * Button 1: PB2 (Pulled Up), Start/Stop Sequence
+ * Button 2: PB3 (Pulled Up), Change Output Level
+ * Button 3: PB4 (Pulled Up), Change Beats per Second
  */
 
 #define RANDOM_INIT 0x4000 // Initial Value to Making Random Value, Must Be Non-zero

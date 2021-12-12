@@ -171,7 +171,7 @@ int main(void) {
 	// Select Fast PWM Mode (3) and Output from OC0A Non-inverted
 	// Fast PWM Mode (7) can make variable frequencies with adjustable duty cycle by settting OCR0A as TOP, but OC0B is only available.
 	TCCR0A = _BV(WGM01)|_BV(WGM00)|_BV(COM0A1);
-	// Start Counter with I/O-Clock 6.4MHz / ( 1 * 256 ) = 25000Hz
+	// Start Counter with I/O-Clock 8.0MHz / ( 1 * 256 ) = 31250Hz
 	TCCR0B = _BV(CS00);
 
 	while(1) {
@@ -224,7 +224,7 @@ int main(void) {
 		}
 		if ( sequencer_next_random ) {
 			random_make( random_high_resolution );
-			OCR0A = (uint8_t)((((int16_t)((random_value & volume_mask) + volume_offset) - SEQUENCER_VOLTAGE_BIAS) >> level_shift) + SEQUENCER_VOLTAGE_BIAS);
+			OCR0A = (uint8_t)((((int16_t)(((random_high_resolution ? random_value : random_value << 1) & volume_mask) + volume_offset) - SEQUENCER_VOLTAGE_BIAS) >> level_shift) + SEQUENCER_VOLTAGE_BIAS);
 			sequencer_next_random = 0;
 		}
 		if ( (PINB ^ pin_button_2) & pin_button_2 ) { // If Match

@@ -16,16 +16,16 @@
 #define CALIB_OSCCAL 0x03 // Frequency Calibration for Individual Difference at VCC = 3.3V
 
 /**
- * Output from PB0 (OC0A)
- * Input from PB1 (Trigger Bit[0]), Set by Detecting Low
- * Input from PB2 (Trigger Bit[1]), Set by Detecting Low
- * Input from PB3 (Trigger Bit[2]), Set by Detecting Low
+ * PWM Output (OC0A): PB0 (DC Biased)
+ * Input Bit[0]: PB1 (Pulled Up, Set by Detecting Low)
+ * Input Bit[1]: PB2 (Pulled Up, Set by Detecting Low)
+ * Input Bit[2]: PB3 (Pulled Up, Set by Detecting Low)
  * Trigger Bit[2:0]:
- *     0b000: Stop Sequencer
- *     0b001: Play Sequence No.1
- *     0b010: Play Sequence No.2
- *     0b011: PLay Sequence No.3
- *     0b100: PLay Sequence No.4
+ *   0b000: Stop Sequencer
+ *   0b001: Play Sequence No.1
+ *   0b010: Play Sequence No.2
+ *   0b011: PLay Sequence No.3
+ *   0b100: PLay Sequence No.4
  *     ...
  * Note that PB4 is reserved as a digital input (pulled-up).
  */
@@ -49,7 +49,7 @@ uint16_t sequencer_interval_random;
 uint16_t sequencer_interval_random_max;
 uint8_t sequencer_next_random;
 
-// Delay Time in Tunrs to Generate Next Random Value
+// Delay Time in Turns to Generate Next Random Value
 uint16_t const sequencer_interval_random_max_array[16] PROGMEM = { // Array in Program Space
 	1,
 	2,
@@ -211,7 +211,7 @@ int main(void) {
 		}
 		if ( sequencer_next_random ) {
 			random_make( random_high_resolution );
-			OCR0A = (random_value & volume_mask) + volume_offset;
+			OCR0A = ((random_high_resolution ? random_value : random_value << 1) & volume_mask) + volume_offset;
 			sequencer_next_random = 0;
 		}
 	}

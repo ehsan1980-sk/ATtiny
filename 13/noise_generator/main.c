@@ -1,10 +1,7 @@
 /**
- * main.c
- *
- * Author: Kenta Ishii
+ * Copyright 2021 Kenta Ishii
  * License: 3-Clause BSD License
- * License URL: https://opensource.org/licenses/BSD-3-Clause
- *
+ * SPDX Short Identifier: BSD-3-Clause
  */
 
 #define F_CPU 9600000UL // Default 9.6Mhz to ATtiny13
@@ -19,32 +16,32 @@
 #define VOLTAGE_BIAS 0x80 // Decimal 128 on Noise Off
 
 #define RANDOM_INIT 0x4000 // Initial Value to Making Random Value, Must Be Non-zero
-inline void random_make( uint8_t bool_high ); // bool_high: True (Not Zero) = 15-bit LFSR-2 (32767 Cycles), Flase (Zero) = 7-bit LFSR-2 (127 Cycles)
+inline void random_make( uint8_t high_resolution ); // high_resolution: True (Not Zero) = 15-bit LFSR-2 (32767 Cycles), Flase (Zero) = 7-bit LFSR-2 (127 Cycles)
 uint16_t random_value;
 
 /**
- * Output Noise from PB0 (OC0A)
- * Input from PB1 (Type Bit[0]), Set by Detecting Low
- * Input from PB2 (Type Bit[1]), Set by Detecting Low
+ * PWM Output (OC0A): PB0 (DC Biased)
+ * Type Bit[0]: PB1 (Pulled Up, Set by Detecting Low)
+ * Type Bit[1]: PB2 (Pulled Up, Set by Detecting Low)
  * Type Bit[1:0]:
- *     0b00: Noise Type[0]
- *     0b01: Noise Tyee[1]
- *     0b10: Noise Type[2]
- *     0b11: Noise Type[3]
- * Input from PB3 (Volume Bit[0]), Set by Detecting Low
- * Input from PB4 (Volume Bit[1]), Set by Detecting Low
+ *   0b00: Noise Type[0]
+ *   0b01: Noise Tyee[1]
+ *   0b10: Noise Type[2]
+ *   0b11: Noise Type[3]
+ * Volume Bit[0]: PB3 (Pulled Up, Set by Detecting Low)
+ * Volume Bit[1]: PB4 (Pulled Up, Set by Detecting Low)
  * Volume Bit[1:0]:
- *     0b00: Noise Off and Reset Random Value
- *     0b01: Noise Volume[1] (Small)
- *     0b10: Noise Volume[2] (Medium)
- *     0b11: Noise Volume[3] (Big)
- * Input from PB5 (Cycle Bit[0]), Set by Detecting Low (Needed Additional Fuse Setting, Causing to Disable Re-programming)
- * Cycle Bit[0]
- *     0b0: Low Cycle (7-bit, 127 Cycles)
- *     0b1: High Cycle (15-bit, 32757 Cycles)
+ *   0b00: Noise Off and Reset Random Value
+ *   0b01: Noise Volume[1] (Small)
+ *   0b10: Noise Volume[2] (Medium)
+ *   0b11: Noise Volume[3] (Big)
+ * Cycle Bit[0]: PB5 (Pulled Up, Set by Detecting Low)
+ * Cycle Bit[0]:
+ *   0b0: Low Cycle (7-bit, 127 Cycles)
+ *   0b1: High Cycle (15-bit, 32757 Cycles)
  */
 
-// Delay Time in Tunrs to Generate Next Random Value
+// Delay Time in Turns to Generate Next Random Value
 uint16_t const array_type[4] PROGMEM = { // Array in Program Space
 	0,
 	3750,
@@ -120,7 +117,7 @@ int main(void) {
 				count_delay = 0;
 				volume_mask = pgm_read_byte(&(array_volume_mask[input_volume]));
 				volume_offset = pgm_read_byte(&(array_volume_offset[input_volume]));
-				OCR0A = (random_value & volume_mask) + volume_offset;
+				OCR0A = ((input_cycle ? random_value : random_value << 1) & volume_mask) + volume_offset;
 			}
 			count_delay++;
 			if ( ! start_noise ) start_noise = 1;
@@ -139,6 +136,6 @@ int main(void) {
 	return 0;
 }
 
-inline void random_make( uint8_t bool_high ) { // The inline attribute doesn't make a call, but implants codes.
-	random_value = (random_value >> 1)|((((random_value & 0x2) >> 1)^(random_value & 0x1)) << (bool_high ? 14 : 6));
+inline void random_make( uint8_t high_resolution ) { // The inline attribute doesn't make a call, but implants codes.
+	random_value = (random_value >> 1)|((((random_value & 0x2) >> 1)^(random_value & 0x1)) << (high_resolution ? 14 : 6));
 }

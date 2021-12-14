@@ -13,16 +13,16 @@
 #include <util/delay.h>
 #include <util/delay_basic.h>
 
-#define CALIB_OSCCAL 0x00 // Frequency Calibration for Individual Difference at VCC = 3.0V
+#define CALIB_OSCCAL -0x04 // Frequency Calibration for Individual Difference at VCC = 3.0V
 
 /**
  * PWM Output (OC0A): PB0 (DC Biased)
  * Input Bit[0]: PB1 (Pulled Up, Set by Detecting Low)
  *   0b0: Sequence Index No. 0
  *   0b1: Sequence Index No. 1
- * Reserved: PB2 (Pulled Up)
+ * Software UART Tx: PB2
  * Button 2: PB3 (Pulled Up), Change Output Level
- * Software UART IN: PB4 (Pulled Up)
+ * Software UART Rx: PB4 (Pulled Up)
  */
 
 #define RANDOM_INIT 0x4000 // Initial Value to Making Random Value, Must Be Non-zero
@@ -38,14 +38,16 @@ uint16_t random_value;
 #define SEQUENCER_LEVEL_SHIFT_MAX 3
 #define SEQUENCER_INPUT_SENSITIVITY 250 // Less Number, More Sensitive (Except 0: Lowest Sensitivity)
 #define SEQUENCER_BUTTON_SENSITIVITY 2500 // Less Number, More Sensitive (Except 0: Lowest Sensitivity)
-#define SEQUENCER_INTERVAL_TIMER1_MAX 4
-#define SOFTWARE_UART_PIN_IN 4
+#define SEQUENCER_BYTE_START 0x41 // A in ASCII Table
+#define SEQUENCER_BYTE_STOP 0x5A // Z in ASCII Table
+#define SOFTWARE_UART_PIN_TX PB2
+#define SOFTWARE_UART_PIN_RX PINB4
 #define SOFTWARE_UART_DATA_BIT_NUMBER 8 // Maximum 8
 #define SOFTWARE_UART_STOP_BIT_NUMBER 1
-#define SOFTWARE_UART_INTERVAL_FIRST 6
+#define SOFTWARE_UART_INTERVAL_RX_FIRST 6
 #define SOFTWARE_UART_INTERVAL 4
-#define SOFTWARE_UART_STATUS_COUNTER_MASK 0x0F
-#define SOFTWARE_UART_STATUS_BUFFER_CHANGE_BIT 0x10
+#define SOFTWARE_UART_STATUS_RX_COUNTER_MASK 0x0F
+#define SOFTWARE_UART_STATUS_RX_BUFFER_CHANGE_BIT 0x10
 
 /* Global Variables without Initialization to Define at .bss Section and Squash .data Section */
 
@@ -56,7 +58,6 @@ uint16_t sequencer_interval_random;
 uint16_t sequencer_interval_random_max;
 uint8_t sequencer_next_random;
 uint8_t sequencer_is_start;
-uint8_t sequencer_interval_timer1;
 
 // Interval (31250 Divided by Beats in 1 Second)
 uint16_t const sequencer_interval_array[SEQUENCER_INTERVAL_NUMBER] PROGMEM = { // Array in Program Space
@@ -137,17 +138,19 @@ uint8_t const sequencer_program_array[SEQUENCER_PROGRAM_LENGTH][SEQUENCER_PROGRA
  * the error with 2.5 percents phase shift is shared by Rx device and Tx device, so it should be up to 1.25 percents for each device.
  */
 
-uint8_t software_uart_status;
-uint8_t software_uart_interval;
-uint8_t software_uart_byte;
-uint8_t software_uart_byte_buffer;
+uint8_t software_uart_tx_count;
+uint8_t software_uart_tx_interval_count;
+uint8_t software_uart_tx_byte;
+uint8_t software_uart_rx_status;
+uint8_t software_uart_rx_interval_count;
+uint8_t software_uart_rx_byte;
+uint8_t software_uart_rx_byte_buffer;
 
 int main(void) {
 
 	/* Declare and Define Local Constants and Variables */
 	uint8_t const pin_input = _BV(PINB1);
 	uint8_t const pin_input_shift = PINB1;
-	uint8_t const pin_button_1 = _BV(PINB2);
 	uint8_t const pin_button_2 = _BV(PINB3);
 	uint8_t volume_mask = 0x00;
 	uint8_t volume_offset = SEQUENCER_VOLTAGE_BIAS;
@@ -160,7 +163,6 @@ int main(void) {
 	uint8_t program_byte;
 	uint8_t osccal_default; // Calibrated Default Value of OSCCAL
 	uint16_t input_sensitivity_count = SEQUENCER_INPUT_SENSITIVITY;
-	int16_t button_1_sensitivity_count = SEQUENCER_BUTTON_SENSITIVITY;
 	int16_t button_2_sensitivity_count = SEQUENCER_BUTTON_SENSITIVITY;
 	uint8_t level_shift = 0;
 	uint8_t uart_status_buffer_change_last = 0;
@@ -175,19 +177,21 @@ int main(void) {
 	sequencer_interval_random_max = 0;
 	sequencer_next_random = 0;
 	sequencer_is_start = 0;
-	sequencer_interval_timer1 = 0;
-	software_uart_status = 0;
-	software_uart_interval = 0;
-	software_uart_byte = 0;
-	software_uart_byte_buffer = 0;
+	software_uart_tx_count = 0;
+	software_uart_tx_interval_count = SOFTWARE_UART_INTERVAL;
+	software_uart_tx_byte = 0;
+	software_uart_rx_status = 0;
+	software_uart_rx_interval_count = SOFTWARE_UART_INTERVAL;
+	software_uart_rx_byte = 0;
+	software_uart_rx_byte_buffer = 0;
 
 	/* Clock Calibration */
 	osccal_default = OSCCAL + CALIB_OSCCAL; // Frequency Calibration for Individual Difference at VCC = 3.0V
 	OSCCAL = osccal_default;
 
 	/* I/O Settings */
-	DDRB = _BV(DDB0);
-	PORTB = _BV(PB4)|_BV(PB3)|_BV(PB2)|_BV(PB1); // Pullup Button Input (There is No Internal Pulldown)
+	DDRB = _BV(DDB2)|_BV(DDB0);
+	PORTB = _BV(PB4)|_BV(PB3)|_BV(PB1); // Pullup Button Input (There is No Internal Pulldown)
 
 	/* PLL On */
 	PLLCSR = _BV(LSM)|_BV(PLLE);
@@ -201,21 +205,21 @@ int main(void) {
 	TCNT0 = 0;
 	// Timer/Counter0: Set Output Compare A
 	OCR0A = SEQUENCER_VOLTAGE_BIAS;
-	// Timer/Counter0: Select Fast PWM Mode (3) and Output from OC0A Non-inverted
-	// Timer/Counter0: Fast PWM Mode (7) can make variable frequencies with adjustable duty cycle by settting OCR0A as TOP, but OC0B is only available.
-	TCCR0A = _BV(WGM01)|_BV(WGM00)|_BV(COM0A1);
-	// Start Counter with I/O-Clock 8.0MHz / ( 1 * 256 ) = 31250Hz
-	TCCR0B = _BV(CS00);
 	// Timer/Counter1: Counter Reset
 	TCNT1 = 0;
 	// Timer/Counter1: Set Output Compare A
 	OCR1A = 0;
 	// Timer/Counter1: Set Output Compare C
-	OCR1C = 0xFF;
-	// Set Timer/Counter1 Overflow Interrupt for "ISR(TIMER1_OVF_vect)"
-	TIMSK = _BV(TOIE1);
-	// Timer/Counter1: Start Counter with PLL Clock 32.0MHz / 256 (OCR1C + 1) = 125000Hz
-	TCCR1 = _BV(CTC1)|_BV(PWM1A)|_BV(CS10);
+	OCR1C = 0xCF; // Decimal 207
+	// Set Timer/Counter1 Overflow Interrupt for "ISR(TIMER1_OVF_vect)" and Timer/Counter0 Overflow Interrupt for "ISR(TIMER0_OVF_vect)"
+	TIMSK = _BV(TOIE1)|_BV(TOIE0);
+	// Timer/Counter0: Select Fast PWM Mode (3) and Output from OC0A Non-inverted
+	// Timer/Counter0: Fast PWM Mode (7) can make variable frequencies with adjustable duty cycle by settting OCR0A as TOP, but OC0B is only available.
+	TCCR0A = _BV(WGM01)|_BV(WGM00)|_BV(COM0A1);
+	// Start Counter with I/O-Clock 8.0MHz / ( 1 * 256 ) = 31250Hz
+	TCCR0B = _BV(CS00);
+	// Timer/Counter1: Start Counter with PLL Clock (32.0MHz / 16) / 208 (OCR1C + 1) = Approx. 9615.38Hz
+	TCCR1 = _BV(CTC1)|_BV(PWM1A)|_BV(CS12)|_BV(CS10);
 	sei(); // Start to Issue Interrupt
 
 	while(1) {
@@ -230,28 +234,23 @@ int main(void) {
 			input_pin_last = input_pin;
 			input_sensitivity_count = SEQUENCER_INPUT_SENSITIVITY;
 		}
-		if ( (PINB ^ pin_button_1) & pin_button_1 ) { // If Match
-			if ( button_1_sensitivity_count >= 0 ) {
-				button_1_sensitivity_count--;
-				if ( button_1_sensitivity_count == 0 ) { // If Count Reaches Zero
-					if ( ! sequencer_is_start ) {
-						random_value = RANDOM_INIT; // Reset Random Value
-						sequencer_interval_count = 0;
-						sequencer_count_update = 1;
-						sequencer_interval_random = 0;
-						sequencer_interval_random_max = 0;
-						count_last = 0;
-						sequencer_is_start = 1;
-					} else {
-						sequencer_is_start = 0;
-						OCR0A = SEQUENCER_VOLTAGE_BIAS;
-						sequencer_next_random = 0;
-						sequencer_is_start = 0;
-					}
-				} // If Count Reaches -1, Do Nothing
-			}
-		} else { // If Not Match
-			button_1_sensitivity_count = SEQUENCER_BUTTON_SENSITIVITY;
+		if ( uart_status_buffer_change_last != (software_uart_rx_status & SOFTWARE_UART_STATUS_RX_BUFFER_CHANGE_BIT) ) {
+			uart_status_buffer_change_last = software_uart_rx_status & SOFTWARE_UART_STATUS_RX_BUFFER_CHANGE_BIT;
+			uart_byte_last = software_uart_rx_byte_buffer;
+		}
+		if ( uart_byte_last == SEQUENCER_BYTE_START && ! sequencer_is_start ) {
+			random_value = RANDOM_INIT; // Reset Random Value
+			sequencer_interval_count = 0;
+			sequencer_count_update = 1;
+			sequencer_interval_random = 0;
+			sequencer_interval_random_max = 0;
+			count_last = 0;
+			sequencer_is_start = 1;
+		} else if ( uart_byte_last == SEQUENCER_BYTE_STOP && sequencer_is_start ) {
+			sequencer_is_start = 0;
+			OCR0A = SEQUENCER_VOLTAGE_BIAS;
+			sequencer_next_random = 0;
+			sequencer_is_start = 0;
 		}
 		if ( sequencer_count_update != count_last ) {
 			if ( sequencer_count_update > SEQUENCER_PROGRAM_COUNTUPTO ) { // If Count Reaches Last
@@ -283,46 +282,65 @@ int main(void) {
 	return 0;
 }
 
+ISR(TIMER0_OVF_vect) {
+	if ( sequencer_is_start ) {
+		sequencer_interval_count++;
+		if ( sequencer_interval_count >= sequencer_interval_max ) {
+			sequencer_interval_count = 0;
+			sequencer_count_update++;
+		}
+		if ( ++sequencer_interval_random >= sequencer_interval_random_max ) {
+			sequencer_interval_random = 0;
+			sequencer_next_random = 1;
+		}
+	}
+}
+
 ISR(TIMER1_OVF_vect) {
 	uint8_t uart_is_high;
-	uint8_t uart_status_counter;
-	uart_is_high = PINB & _BV(SOFTWARE_UART_PIN_IN);
-	uart_status_counter = software_uart_status & SOFTWARE_UART_STATUS_COUNTER_MASK;
-	if ( ! uart_status_counter ) {
+	uint8_t uart_status_rx_counter;
+	uart_is_high = (PINB & _BV(SOFTWARE_UART_PIN_RX)) >> SOFTWARE_UART_PIN_RX; // Shift Right to Make 0b1 for Further Process
+	uart_status_rx_counter = software_uart_rx_status & SOFTWARE_UART_STATUS_RX_COUNTER_MASK;
+	if ( ! uart_status_rx_counter ) {
 		if ( ! uart_is_high ) {
-			software_uart_status += 0b1;
-			software_uart_interval = SOFTWARE_UART_INTERVAL_FIRST;
-			software_uart_byte = 0;
+			software_uart_rx_status += 0b1;
+			software_uart_rx_interval_count = SOFTWARE_UART_INTERVAL_RX_FIRST;
+			software_uart_rx_byte = 0;
 		}
 	} else {
-		if ( --software_uart_interval == 0 ) {
-			software_uart_interval = SOFTWARE_UART_INTERVAL;
-			if ( uart_status_counter <= SOFTWARE_UART_DATA_BIT_NUMBER ) {
-				software_uart_status += 0b1;
-				software_uart_byte |= uart_is_high << (uart_status_counter - 1);
+		if ( --software_uart_rx_interval_count == 0 ) {
+			software_uart_rx_interval_count = SOFTWARE_UART_INTERVAL;
+			if ( uart_status_rx_counter <= SOFTWARE_UART_DATA_BIT_NUMBER ) {
+				software_uart_rx_status += 0b1;
+				software_uart_rx_byte |= uart_is_high << (uart_status_rx_counter - 1);
 			} else {
 				if ( uart_is_high ) {
-					software_uart_status += 0b1;
-					if ( (uart_status_counter - SOFTWARE_UART_DATA_BIT_NUMBER) >= SOFTWARE_UART_STOP_BIT_NUMBER ) {
-						software_uart_byte_buffer = software_uart_byte;
-						software_uart_status ^= (software_uart_status|SOFTWARE_UART_STATUS_BUFFER_CHANGE_BIT); // Clear Counter and Flip Buffer Change Bit
+					software_uart_rx_status += 0b1;
+					if ( (uart_status_rx_counter - SOFTWARE_UART_DATA_BIT_NUMBER) >= SOFTWARE_UART_STOP_BIT_NUMBER ) {
+						software_uart_rx_byte_buffer = software_uart_rx_byte;
+						software_uart_rx_status ^= software_uart_rx_status|SOFTWARE_UART_STATUS_RX_BUFFER_CHANGE_BIT; // Clear Counter and Flip Buffer Change Bit
+						software_uart_tx_byte = software_uart_rx_byte;
+						software_uart_tx_count = 9;
 					}
 				}
 			}
 		}
 	}
-	if ( ++sequencer_interval_timer1 >= SEQUENCER_INTERVAL_TIMER1_MAX ) {
-		sequencer_interval_timer1 = 0;
-		if ( sequencer_is_start ) {
-			sequencer_interval_count++;
-			if ( sequencer_interval_count >= sequencer_interval_max ) {
-				sequencer_interval_count = 0;
-				sequencer_count_update++;
+	if ( --software_uart_tx_interval_count == 0 ) {
+		software_uart_tx_interval_count = SOFTWARE_UART_INTERVAL;
+		if ( software_uart_tx_count > SOFTWARE_UART_DATA_BIT_NUMBER ) {
+			PORTB &= ~(_BV(SOFTWARE_UART_PIN_TX));
+			--software_uart_tx_count;
+		} else if ( software_uart_tx_count > 0 ) {
+			if ( software_uart_tx_byte & _BV(SOFTWARE_UART_DATA_BIT_NUMBER - software_uart_tx_count) ) {
+				PORTB |= _BV(SOFTWARE_UART_PIN_TX);
+			} else {
+				PORTB &= ~(_BV(SOFTWARE_UART_PIN_TX));
 			}
-			if ( ++sequencer_interval_random >= sequencer_interval_random_max ) {
-				sequencer_interval_random = 0;
-				sequencer_next_random = 1;
-			}
+			--software_uart_tx_count;
+		} else {
+			PORTB |= _BV(SOFTWARE_UART_PIN_TX);
+			software_uart_tx_interval_count += SOFTWARE_UART_STOP_BIT_NUMBER * SOFTWARE_UART_INTERVAL;
 		}
 	}
 }

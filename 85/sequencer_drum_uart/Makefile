@@ -5,7 +5,7 @@
 ##
 
 # Name of Program
-NAME := sequencer_drum_pll
+NAME := sequencer_drum_uart
 
 # Main C Code
 OBJ1 := main

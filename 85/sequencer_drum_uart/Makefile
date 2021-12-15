@@ -27,8 +27,8 @@ PROG := linuxgpio
 INTERVAL := 100
 EFUSE := 0xFF
 HFUSE := 0xDF
-# Unprogrammed CKDIV8, Internal 8.0MHz Clock
-LFUSE := 0xE2
+# Unprogrammed CKDIV8, Internal PLL 16.0MHz Clock
+LFUSE := 0xE1
 
 # "$@" means the target and $^ means all of dependencies and $< is first one.
 # If you meets "make: `main' is up to date.", use "touch" command to renew.

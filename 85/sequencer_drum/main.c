@@ -13,7 +13,7 @@
 #include <util/delay.h>
 #include <util/delay_basic.h>
 
-#define CALIB_OSCCAL 0x00 // Frequency Calibration for Individual Difference at VCC = 3.0V
+#define CALIB_OSCCAL -0x04 // Frequency Calibration for Individual Difference at VCC = 3.0V
 
 /**
  * PWM Output (OC0A): PB0 (DC Biased)
@@ -166,7 +166,7 @@ int main(void) {
 	TCNT0 = 0;
 	// Set Output Compare A
 	OCR0A = SEQUENCER_VOLTAGE_BIAS;
-	// Set Timer/Counter0 Overflow Interrupt for "ISR(TIM0_OVF_vect)"
+	// Set Timer/Counter0 Overflow Interrupt for "ISR(TIMER0_OVF_vect)"
 	TIMSK = _BV(TOIE0);
 	// Select Fast PWM Mode (3) and Output from OC0A Non-inverted
 	// Fast PWM Mode (7) can make variable frequencies with adjustable duty cycle by settting OCR0A as TOP, but OC0B is only available.
@@ -252,7 +252,7 @@ int main(void) {
 	return 0;
 }
 
-ISR(TIM0_OVF_vect) {
+ISR(TIMER0_OVF_vect) {
 	sequencer_interval_count++;
 	if ( sequencer_interval_count >= sequencer_interval_max ) {
 		sequencer_interval_count = 0;

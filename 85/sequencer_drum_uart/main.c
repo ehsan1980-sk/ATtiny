@@ -4,7 +4,7 @@
  * SPDX Short Identifier: BSD-3-Clause
  */
 
-#define F_CPU 8000000UL // 8.0Mhz to ATtiny85
+#define F_CPU 16000000UL // PLL 16.0Mhz to ATtiny85
 #include <stdlib.h>
 #include <avr/io.h>
 #include <avr/cpufunc.h>
@@ -13,7 +13,7 @@
 #include <util/delay.h>
 #include <util/delay_basic.h>
 
-#define CALIB_OSCCAL -0x04 // Frequency Calibration for Individual Difference at VCC = 3.0V
+#define CALIB_OSCCAL -0x04 // Frequency Calibration for Individual Difference at VCC = 3.3V
 
 /**
  * PWM Output (OC0A): PB0 (DC Biased)
@@ -30,7 +30,7 @@ inline void random_make( uint8_t high_resolution ); // high_resolution: True (No
 uint16_t random_value;
 
 #define SEQUENCER_VOLTAGE_BIAS 0x80 // Decimal 128 on Noise Off
-#define SEQUENCER_SAMPLE_RATE (double)(F_CPU / 256) // 31250 Samples per Seconds
+#define SEQUENCER_SAMPLE_RATE (double)(F_CPU / 510) // Approx. 31372.55 Samples per Seconds
 #define SEQUENCER_INTERVAL_NUMBER 9
 #define SEQUENCER_INTERVAL_INDEX_DEFAULT 0
 #define SEQUENCER_PROGRAM_COUNTUPTO 64
@@ -42,8 +42,8 @@ uint16_t random_value;
 #define SEQUENCER_BYTE_STOP 0x5A // Z in ASCII Table
 #define SOFTWARE_UART_PIN_TX PB2
 #define SOFTWARE_UART_PIN_RX PINB4
-#define SOFTWARE_UART_DATA_BIT_NUMBER 8 // Maximum 8
-#define SOFTWARE_UART_STOP_BIT_NUMBER 1
+#define SOFTWARE_UART_DATA_BIT_NUMBER 8 // Must Be Maximum 8
+#define SOFTWARE_UART_STOP_BIT_NUMBER 1 // Must Be Minimum 1
 #define SOFTWARE_UART_INTERVAL_RX_FIRST 6
 #define SOFTWARE_UART_INTERVAL 4
 #define SOFTWARE_UART_STATUS_RX_COUNTER_MASK 0x0F
@@ -186,7 +186,7 @@ int main(void) {
 	software_uart_rx_byte_buffer = 0;
 
 	/* Clock Calibration */
-	osccal_default = OSCCAL + CALIB_OSCCAL; // Frequency Calibration for Individual Difference at VCC = 3.0V
+	osccal_default = OSCCAL + CALIB_OSCCAL; // Frequency Calibration for Individual Difference at VCC = 3.3V
 	OSCCAL = osccal_default;
 
 	/* I/O Settings */
@@ -194,7 +194,7 @@ int main(void) {
 	PORTB = _BV(PB4)|_BV(PB3)|_BV(PB1); // Pullup Button Input (There is No Internal Pulldown)
 
 	/* PLL On */
-	PLLCSR = _BV(LSM)|_BV(PLLE);
+	if ( ! (PLLCSR & _BV(PLLE)) ) PLLCSR |= _BV(PLLE);
 	do {
 		_delay_us(100);
 	} while ( ! (PLLCSR & _BV(PLOCK)) );
@@ -213,13 +213,13 @@ int main(void) {
 	OCR1C = 0xCF; // Decimal 207
 	// Set Timer/Counter1 Overflow Interrupt for "ISR(TIMER1_OVF_vect)" and Timer/Counter0 Overflow Interrupt for "ISR(TIMER0_OVF_vect)"
 	TIMSK = _BV(TOIE1)|_BV(TOIE0);
-	// Timer/Counter0: Select Fast PWM Mode (3) and Output from OC0A Non-inverted
-	// Timer/Counter0: Fast PWM Mode (7) can make variable frequencies with adjustable duty cycle by settting OCR0A as TOP, but OC0B is only available.
-	TCCR0A = _BV(WGM01)|_BV(WGM00)|_BV(COM0A1);
-	// Start Counter with I/O-Clock 8.0MHz / ( 1 * 256 ) = 31250Hz
+	// Timer/Counter0: Select Phase Correct PWM Mode (1) and Output from OC0A Non-inverted
+	// Timer/Counter0: Phase Correct Mode (5) can make variable frequencies with adjustable duty cycle by settting OCR0A as TOP, but OC0B is only available.
+	TCCR0A = _BV(WGM00)|_BV(COM0A1);
+	// Start Counter with I/O-Clock 16.0MHz / ( 1 * 510 ) = Approx. 31372.55Hz
 	TCCR0B = _BV(CS00);
-	// Timer/Counter1: Start Counter with PLL Clock (32.0MHz / 16) / 208 (OCR1C + 1) = Approx. 9615.38Hz
-	TCCR1 = _BV(CTC1)|_BV(PWM1A)|_BV(CS12)|_BV(CS10);
+	// Timer/Counter1: Start Counter with PLL Clock (64.0MHz / 32) / 208 (OCR1C + 1) = Approx. 9615.38Hz
+	TCCR1 = _BV(PWM1A)|_BV(CS12)|_BV(CS11);
 	sei(); // Start to Issue Interrupt
 
 	while(1) {
@@ -237,6 +237,7 @@ int main(void) {
 		if ( uart_status_buffer_change_last != (software_uart_rx_status & SOFTWARE_UART_STATUS_RX_BUFFER_CHANGE_BIT) ) {
 			uart_status_buffer_change_last = software_uart_rx_status & SOFTWARE_UART_STATUS_RX_BUFFER_CHANGE_BIT;
 			uart_byte_last = software_uart_rx_byte_buffer;
+			//if ( uart_byte_last == SEQUENCER_BYTE_START && sequencer_is_start ) sequencer_count_update++;
 		}
 		if ( uart_byte_last == SEQUENCER_BYTE_START && ! sequencer_is_start ) {
 			random_value = RANDOM_INIT; // Reset Random Value
@@ -340,7 +341,7 @@ ISR(TIMER1_OVF_vect) {
 			--software_uart_tx_count;
 		} else {
 			PORTB |= _BV(SOFTWARE_UART_PIN_TX);
-			software_uart_tx_interval_count += SOFTWARE_UART_STOP_BIT_NUMBER * SOFTWARE_UART_INTERVAL;
+			software_uart_tx_interval_count += (SOFTWARE_UART_STOP_BIT_NUMBER - 1) * SOFTWARE_UART_INTERVAL;
 		}
 	}
 }

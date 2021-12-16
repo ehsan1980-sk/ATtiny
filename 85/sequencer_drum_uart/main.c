@@ -17,12 +17,14 @@
 
 /**
  * PWM Output (OC0A): PB0 (DC Biased)
- * Input Bit[0]: PB1 (Pulled Up, Set by Detecting Low)
- *   0b0: Sequence Index No. 0
- *   0b1: Sequence Index No. 1
+ * Reserved: PB1 (Pulled Up)
  * Software UART Tx: PB2
  * Button 2: PB3 (Pulled Up), Change Output Level
  * Software UART Rx: PB4 (Pulled Up)
+ *  0x58 (X): Start and Clock Sequence (1)
+ *  0x59 (Y): Start and Clock Sequence (2)
+ *  0x50 (P): Stop and Reset Sequence
+ *  Note: The set of Bit[3] starts a sequence, and the clear of Bit[3] stops a sequence. Bit[2:0] selects a sequence. Bit[7:4] indentifies a device group (in 4 groups).
  */
 
 #define RANDOM_INIT 0x4000 // Initial Value to Making Random Value, Must Be Non-zero
@@ -36,10 +38,11 @@ uint16_t random_value;
 #define SEQUENCER_PROGRAM_COUNTUPTO 64
 #define SEQUENCER_PROGRAM_LENGTH 2 // Length of Sequence
 #define SEQUENCER_LEVEL_SHIFT_MAX 3
-#define SEQUENCER_INPUT_SENSITIVITY 250 // Less Number, More Sensitive (Except 0: Lowest Sensitivity)
 #define SEQUENCER_BUTTON_SENSITIVITY 2500 // Less Number, More Sensitive (Except 0: Lowest Sensitivity)
-#define SEQUENCER_BYTE_START 0x41 // A in ASCII Table
-#define SEQUENCER_BYTE_STOP 0x5A // Z in ASCII Table
+#define SEQUENCER_BYTE_GROUP_BIT 0x50
+#define SEQUENCER_BYTE_START_BIT 0x08
+#define SEQUENCER_BYTE_GROUP_START_BIT (SEQUENCER_BYTE_GROUP_BIT|SEQUENCER_BYTE_START_BIT)
+#define SEQUENCER_BYTE_PROGRAM_MASK 0x07
 #define SOFTWARE_UART_PIN_TX PB2
 #define SOFTWARE_UART_PIN_RX PINB4
 #define SOFTWARE_UART_DATA_BIT_NUMBER 8 // Must Be Maximum 8
@@ -149,20 +152,15 @@ uint8_t software_uart_rx_byte_buffer;
 int main(void) {
 
 	/* Declare and Define Local Constants and Variables */
-	uint8_t const pin_input = _BV(PINB1);
-	uint8_t const pin_input_shift = PINB1;
 	uint8_t const pin_button_2 = _BV(PINB3);
 	uint8_t volume_mask = 0x00;
 	uint8_t volume_offset = SEQUENCER_VOLTAGE_BIAS;
 	uint8_t random_high_resolution = 0;
 	uint16_t count_last = 0;
-	uint8_t input_pin;
-	uint8_t input_pin_last = 0;
 	uint8_t interval_index = SEQUENCER_INTERVAL_INDEX_DEFAULT;
 	uint8_t program_index = 0;
 	uint8_t program_byte;
 	uint8_t osccal_default; // Calibrated Default Value of OSCCAL
-	uint16_t input_sensitivity_count = SEQUENCER_INPUT_SENSITIVITY;
 	int16_t button_2_sensitivity_count = SEQUENCER_BUTTON_SENSITIVITY;
 	uint8_t level_shift = 0;
 	uint8_t uart_status_buffer_change_last = 0;
@@ -223,23 +221,12 @@ int main(void) {
 	sei(); // Start to Issue Interrupt
 
 	while(1) {
-		input_pin = ((PINB ^ pin_input) & pin_input) >> pin_input_shift;
-		if ( input_pin >= SEQUENCER_PROGRAM_LENGTH ) input_pin = SEQUENCER_PROGRAM_LENGTH - 1;
-		if ( input_pin == input_pin_last ) { // If Match
-			if ( ! --input_sensitivity_count ) { // If Count Reaches Zero
-				program_index = input_pin_last;
-				input_sensitivity_count = SEQUENCER_INPUT_SENSITIVITY;
-			}
-		} else { // If Not Match
-			input_pin_last = input_pin;
-			input_sensitivity_count = SEQUENCER_INPUT_SENSITIVITY;
-		}
 		if ( uart_status_buffer_change_last != (software_uart_rx_status & SOFTWARE_UART_STATUS_RX_BUFFER_CHANGE_BIT) ) {
 			uart_status_buffer_change_last = software_uart_rx_status & SOFTWARE_UART_STATUS_RX_BUFFER_CHANGE_BIT;
 			uart_byte_last = software_uart_rx_byte_buffer;
-			//if ( uart_byte_last == SEQUENCER_BYTE_START && sequencer_is_start ) sequencer_count_update++;
+			if ( ((uart_byte_last & SEQUENCER_BYTE_GROUP_START_BIT) == SEQUENCER_BYTE_GROUP_START_BIT) && sequencer_is_start ) sequencer_count_update++;
 		}
-		if ( uart_byte_last == SEQUENCER_BYTE_START && ! sequencer_is_start ) {
+		if ( ((uart_byte_last & SEQUENCER_BYTE_GROUP_START_BIT) == SEQUENCER_BYTE_GROUP_START_BIT) && ! sequencer_is_start ) {
 			random_value = RANDOM_INIT; // Reset Random Value
 			sequencer_interval_count = 0;
 			sequencer_count_update = 1;
@@ -247,7 +234,7 @@ int main(void) {
 			sequencer_interval_random_max = 0;
 			count_last = 0;
 			sequencer_is_start = 1;
-		} else if ( uart_byte_last == SEQUENCER_BYTE_STOP && sequencer_is_start ) {
+		} else if ( ((uart_byte_last & SEQUENCER_BYTE_GROUP_START_BIT) == SEQUENCER_BYTE_GROUP_BIT) && sequencer_is_start ) {
 			sequencer_is_start = 0;
 			OCR0A = SEQUENCER_VOLTAGE_BIAS;
 			sequencer_next_random = 0;
@@ -258,6 +245,11 @@ int main(void) {
 				sequencer_count_update = 1;
 			}
 			count_last = sequencer_count_update;
+			program_index = uart_byte_last & SEQUENCER_BYTE_PROGRAM_MASK;
+			// Prevent Memory Overflow
+			if ( program_index >= SEQUENCER_PROGRAM_LENGTH ) program_index = SEQUENCER_PROGRAM_LENGTH - 1;
+			// Prevent Memory Overflow in Case That Doesn't Happen Logically
+			//if ( ! count_last ) count_last = 1;
 			program_byte = pgm_read_byte(&(sequencer_program_array[program_index][count_last - 1]));
 			sequencer_interval_random_max = pgm_read_word(&(sequencer_interval_random_max_array[program_byte & 0xF]));
 			volume_mask = pgm_read_byte(&(sequencer_volume_mask_array[(program_byte & 0x70) >> 4]));
@@ -285,11 +277,6 @@ int main(void) {
 
 ISR(TIMER0_OVF_vect) {
 	if ( sequencer_is_start ) {
-		sequencer_interval_count++;
-		if ( sequencer_interval_count >= sequencer_interval_max ) {
-			sequencer_interval_count = 0;
-			sequencer_count_update++;
-		}
 		if ( ++sequencer_interval_random >= sequencer_interval_random_max ) {
 			sequencer_interval_random = 0;
 			sequencer_next_random = 1;

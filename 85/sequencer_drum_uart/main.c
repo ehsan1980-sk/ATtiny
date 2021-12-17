@@ -17,9 +17,9 @@
 
 /**
  * PWM Output (OC0A): PB0 (DC Biased)
- * Reserved: PB1 (Pulled Up)
- * Software UART Tx: PB2
- * Button 2: PB3 (Pulled Up), Change Output Level
+ * Reserved to Control Transceiver or Device: PB1 (Output with Low)
+ * Reserved to Control Transceiver or Device: PB2 (Output with Low)
+ * Software UART Tx: PB3
  * Software UART Rx: PB4 (Pulled Up)
  *  0x58 (X): Start and Clock Sequence (1)
  *  0x59 (Y): Start and Clock Sequence (2)
@@ -29,21 +29,17 @@
 
 #define RANDOM_INIT 0x4000 // Initial Value to Making Random Value, Must Be Non-zero
 inline void random_make( uint8_t high_resolution ); // high_resolution: True (Not Zero) = 15-bit LFSR-2 (32767 Cycles), Flase (Zero) = 7-bit LFSR-2 (127 Cycles)
-uint16_t random_value;
+volatile uint16_t random_value;
 
 #define SEQUENCER_VOLTAGE_BIAS 0x80 // Decimal 128 on Noise Off
 #define SEQUENCER_SAMPLE_RATE (double)(F_CPU / 510) // Approx. 31372.55 Samples per Seconds
-#define SEQUENCER_INTERVAL_NUMBER 9
-#define SEQUENCER_INTERVAL_INDEX_DEFAULT 0
 #define SEQUENCER_PROGRAM_COUNTUPTO 64
 #define SEQUENCER_PROGRAM_LENGTH 2 // Length of Sequence
-#define SEQUENCER_LEVEL_SHIFT_MAX 3
-#define SEQUENCER_BUTTON_SENSITIVITY 2500 // Less Number, More Sensitive (Except 0: Lowest Sensitivity)
 #define SEQUENCER_BYTE_GROUP_BIT 0x50
 #define SEQUENCER_BYTE_START_BIT 0x08
 #define SEQUENCER_BYTE_GROUP_START_BIT (SEQUENCER_BYTE_GROUP_BIT|SEQUENCER_BYTE_START_BIT)
 #define SEQUENCER_BYTE_PROGRAM_MASK 0x07
-#define SOFTWARE_UART_PIN_TX PB2
+#define SOFTWARE_UART_PIN_TX PB3
 #define SOFTWARE_UART_PIN_RX PINB4
 #define SOFTWARE_UART_DATA_BIT_NUMBER 8 // Must Be Maximum 8
 #define SOFTWARE_UART_STOP_BIT_NUMBER 1 // Must Be Minimum 1
@@ -54,26 +50,11 @@ uint16_t random_value;
 
 /* Global Variables without Initialization to Define at .bss Section and Squash .data Section */
 
-uint16_t sequencer_interval_max;
-uint16_t sequencer_interval_count;
-uint16_t sequencer_count_update;
-uint16_t sequencer_interval_random;
-uint16_t sequencer_interval_random_max;
-uint8_t sequencer_next_random;
-uint8_t sequencer_is_start;
-
-// Interval (31250 Divided by Beats in 1 Second)
-uint16_t const sequencer_interval_array[SEQUENCER_INTERVAL_NUMBER] PROGMEM = { // Array in Program Space
-	3906, // 8 Beats
-	3472, // 9 Beats
-	3125, // 10 Beats
-	2841, // 11 Beats
-	2604, // 12 Beats
-	2404, // 13 Beats
-	2232, // 14 Beats
-	2083, // 15 Beats
-	1953 // 16 Beats
-};
+volatile uint16_t sequencer_count_update;
+volatile uint16_t sequencer_interval_random;
+volatile uint16_t sequencer_interval_random_max;
+volatile uint8_t sequencer_next_random;
+volatile uint8_t sequencer_is_start;
 
 // Delay Time in Turns to Generate Next Random Value
 uint16_t const sequencer_interval_random_max_array[16] PROGMEM = { // Array in Program Space
@@ -141,35 +122,29 @@ uint8_t const sequencer_program_array[SEQUENCER_PROGRAM_LENGTH][SEQUENCER_PROGRA
  * the error with 2.5 percents phase shift is shared by Rx device and Tx device, so it should be up to 1.25 percents for each device.
  */
 
-uint8_t software_uart_tx_count;
-uint8_t software_uart_tx_interval_count;
-uint8_t software_uart_tx_byte;
-uint8_t software_uart_rx_status;
-uint8_t software_uart_rx_interval_count;
-uint8_t software_uart_rx_byte;
-uint8_t software_uart_rx_byte_buffer;
+volatile uint8_t software_uart_tx_count;
+volatile uint8_t software_uart_tx_interval_count;
+volatile uint8_t software_uart_tx_byte;
+volatile uint8_t software_uart_rx_status;
+volatile uint8_t software_uart_rx_interval_count;
+volatile uint8_t software_uart_rx_byte;
+volatile uint8_t software_uart_rx_byte_buffer;
 
 int main(void) {
 
 	/* Declare and Define Local Constants and Variables */
-	uint8_t const pin_button_2 = _BV(PINB3);
 	uint8_t volume_mask = 0x00;
 	uint8_t volume_offset = SEQUENCER_VOLTAGE_BIAS;
 	uint8_t random_high_resolution = 0;
 	uint16_t count_last = 0;
-	uint8_t interval_index = SEQUENCER_INTERVAL_INDEX_DEFAULT;
 	uint8_t program_index = 0;
 	uint8_t program_byte;
 	uint8_t osccal_default; // Calibrated Default Value of OSCCAL
-	int16_t button_2_sensitivity_count = SEQUENCER_BUTTON_SENSITIVITY;
-	uint8_t level_shift = 0;
 	uint8_t uart_status_buffer_change_last = 0;
 	uint8_t uart_byte_last = 0;
 
 	/* Initialize Global Variables */
 	random_value = RANDOM_INIT;
-	sequencer_interval_max = pgm_read_word(&(sequencer_interval_array[interval_index]));
-	sequencer_interval_count = 0;
 	sequencer_count_update = 0;
 	sequencer_interval_random = 0;
 	sequencer_interval_random_max = 0;
@@ -187,16 +162,17 @@ int main(void) {
 	osccal_default = OSCCAL + CALIB_OSCCAL; // Frequency Calibration for Individual Difference at VCC = 3.3V
 	OSCCAL = osccal_default;
 
-	/* I/O Settings */
-	DDRB = _BV(DDB2)|_BV(DDB0);
-	PORTB = _BV(PB4)|_BV(PB3)|_BV(PB1); // Pullup Button Input (There is No Internal Pulldown)
-
 	/* PLL On */
 	if ( ! (PLLCSR & _BV(PLLE)) ) PLLCSR |= _BV(PLLE);
 	do {
 		_delay_us(100);
 	} while ( ! (PLLCSR & _BV(PLOCK)) );
 	PLLCSR |= _BV(PCKE);
+
+	/* I/O Settings */
+	DDRB = _BV(DDB3)|_BV(DDB2)|_BV(DDB1)|_BV(DDB0);
+	// To Do: Turn On Transceiver at This Point with Decent Delay
+	PORTB = _BV(PB4)|_BV(PB3); // Software UART Rx (PB4) Pullup (There is No Internal Pulldown), and Software UART Tx (PB3) High
 
 	/* Counters */
 	// Timer/Counter0: Counter Reset
@@ -228,7 +204,6 @@ int main(void) {
 		}
 		if ( ((uart_byte_last & SEQUENCER_BYTE_GROUP_START_BIT) == SEQUENCER_BYTE_GROUP_START_BIT) && ! sequencer_is_start ) {
 			random_value = RANDOM_INIT; // Reset Random Value
-			sequencer_interval_count = 0;
 			sequencer_count_update = 1;
 			sequencer_interval_random = 0;
 			sequencer_interval_random_max = 0;
@@ -238,7 +213,6 @@ int main(void) {
 			sequencer_is_start = 0;
 			OCR0A = SEQUENCER_VOLTAGE_BIAS;
 			sequencer_next_random = 0;
-			sequencer_is_start = 0;
 		}
 		if ( sequencer_count_update != count_last ) {
 			if ( sequencer_count_update > SEQUENCER_PROGRAM_COUNTUPTO ) { // If Count Reaches Last
@@ -258,18 +232,8 @@ int main(void) {
 		}
 		if ( sequencer_next_random ) {
 			random_make( random_high_resolution );
-			OCR0A = (uint8_t)((((int16_t)(((random_high_resolution ? random_value : random_value << 1) & volume_mask) + volume_offset) - SEQUENCER_VOLTAGE_BIAS) >> level_shift) + SEQUENCER_VOLTAGE_BIAS);
+			OCR0A = ((uint8_t)(random_high_resolution ? random_value : random_value << 1) & volume_mask) + volume_offset;
 			sequencer_next_random = 0;
-		}
-		if ( (PINB ^ pin_button_2) & pin_button_2 ) { // If Match
-			if ( button_2_sensitivity_count >= 0 ) {
-				button_2_sensitivity_count--;
-				if ( button_2_sensitivity_count == 0 ) { // If Count Reaches Zero
-					if ( ++level_shift > SEQUENCER_LEVEL_SHIFT_MAX ) level_shift = 0;
-				} // If Count Reaches -1, Do Nothing
-			}
-		} else { // If Not Match
-			button_2_sensitivity_count = SEQUENCER_BUTTON_SENSITIVITY;
 		}
 	}
 	return 0;

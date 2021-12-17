@@ -17,7 +17,7 @@
 
 #define RANDOM_INIT 0x4000 // Initial Value to Making Random Value, Must Be Non-zero
 inline void random_make( uint8_t high_resolution ); // high_resolution: True (Not Zero) = 15-bit LFSR-2 (32767 Cycles), Flase (Zero) = 7-bit LFSR-2 (127 Cycles)
-uint16_t random_value;
+volatile uint16_t random_value;
 
 /**
  * PWM Output (OC0A): PB0 (DC Biased)
@@ -117,7 +117,7 @@ int main(void) {
 				count_delay = 0;
 				volume_mask = pgm_read_byte(&(array_volume_mask[input_volume]));
 				volume_offset = pgm_read_byte(&(array_volume_offset[input_volume]));
-				OCR0A = ((input_cycle ? random_value : random_value << 1) & volume_mask) + volume_offset;
+				OCR0A = ((uint8_t)(input_cycle ? random_value : random_value << 1) & volume_mask) + volume_offset;
 			}
 			count_delay++;
 			if ( ! start_noise ) start_noise = 1;

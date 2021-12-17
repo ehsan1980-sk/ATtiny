@@ -32,7 +32,7 @@
 
 #define RANDOM_INIT 0x4000 // Initial Value to Making Random Value, Must Be Non-zero
 inline void random_make( uint8_t high_resolution ); // high_resolution: True (Not Zero) = 15-bit LFSR-2 (32767 Cycles), Flase (Zero) = 7-bit LFSR-2 (127 Cycles)
-uint16_t random_value;
+volatile uint16_t random_value;
 
 #define SEQUENCER_VOLTAGE_BIAS 0x80 // Decimal 128 on Noise Off
 #define SEQUENCER_SAMPLE_RATE (double)(F_CPU / 256) // 37500 Samples per Seconds
@@ -43,11 +43,11 @@ uint16_t random_value;
 
 /* Global Variables without Initialization to Define at .bss Section and Squash .data Section */
 
-uint16_t sequencer_interval_count;
-uint16_t sequencer_count_update;
-uint16_t sequencer_interval_random;
-uint16_t sequencer_interval_random_max;
-uint8_t sequencer_next_random;
+volatile uint16_t sequencer_interval_count;
+volatile uint16_t sequencer_count_update;
+volatile uint16_t sequencer_interval_random;
+volatile uint16_t sequencer_interval_random_max;
+volatile uint8_t sequencer_next_random;
 
 // Delay Time in Turns to Generate Next Random Value
 uint16_t const sequencer_interval_random_max_array[16] PROGMEM = { // Array in Program Space
@@ -211,7 +211,7 @@ int main(void) {
 		}
 		if ( sequencer_next_random ) {
 			random_make( random_high_resolution );
-			OCR0A = ((random_high_resolution ? random_value : random_value << 1) & volume_mask) + volume_offset;
+			OCR0A = ((uint8_t)(random_high_resolution ? random_value : random_value << 1) & volume_mask) + volume_offset;
 			sequencer_next_random = 0;
 		}
 	}

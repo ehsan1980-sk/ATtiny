@@ -8,9 +8,11 @@
 
 **About TinyAVR/ATtiny**
 
-* TinyAVR/ATtiny is a family of microcontrollers. Specially, I'm trying to make software of ATtiny13 which has 8 pins.
+* TinyAVR/ATtiny is a family of microcontrollers. I'm trying to make applications of ATtiny13/85 which has 8 pins.
 
 * ATtiny13 is the simplest one. Available interfaces are PWM, ADC, GPIO, and Comparator. It also has a 8-bit timer/counter, and has a unique 9.6MHz RC oscillator which allows to make a software UART Tx with the baud rate 9600, 19200, 38400, etc.
+
+* ATtiny85 can make a pair of software UART Tx and Rx with full duplex. In applications with real time processing, I'm trying serial communication with ATtiny85 on low baud rate like 2400, considering to implement the RS485 interface for a unidirectional networking with a wide range such as illumination.
 
 ## Installation
 
@@ -95,7 +97,7 @@ git diff main.c
 
 ## Electric Schematics
 
-* [Sound Output with PWM of ATtiny13](schematics/sound_output_pwm.pdf): Tested with a USB mono microphone input (TRS) at the dB gain -1.00 to 1.00, i.e., no boost or less. A line-level input is preferred, but not tested. DC offset occurs on Noise Generator and Sequencer Noise. Small capacitance for C3 makes a high-pass filter to ease the DC offset. I tested 10uF and 1uF for C3, and confirmed that the DC offset is eased. If you apply this with analogue input to an ADC, this easily makes resonance noise. Place another decoupling capacitor close to VCC and GND of U1.
+* [Sound Output with PWM of ATtiny13/85](schematics/sound_output_pwm_attiny.pdf): Tested with a line-level input of a USB audio Interface.
 
 ## Technical Notes
 

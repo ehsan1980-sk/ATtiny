@@ -12,7 +12,7 @@
 
 * ATtiny13 is the simplest one. Available interfaces are PWM, ADC, GPIO, and Comparator. It also has a 8-bit timer/counter, and has a unique 9.6MHz RC oscillator which allows to make a software UART Tx with the baud rate 9600, 19200, 38400, etc.
 
-* ATtiny85 can make a pair of software UART Tx and Rx with full duplex. In applications with real time processing, I'm trying serial communication with ATtiny85 on low baud rate like 2400, considering to implement the RS485 interface for a unidirectional networking with a wide range such as illumination.
+* ATtiny85 can make a pair of software UART Tx and Rx with full duplex. In applications with real time processing, I'm trying serial communication with ATtiny85 on low baud rate like 2400, considering to implement the RS-485 interface for a unidirectional networking with a wide range such as illumination.
 
 ## Installation
 
@@ -94,6 +94,12 @@ git diff main.c
 ```
 
 * Sequencer emits 180 degrees phase shifted saw tooth wave; because in the ideal behavior, the wave can be transformed to sine wave through omitting all harmonics. Making square wave is easy; however in my experience, it often has noise like resonance after rising or falling edge, causing losses of electric power. Square/pulse wave can be made by a comparator inputted saw tooth wave.
+
+## RS-485 with ATtiny85
+
+* In a unidirectional networking, connections can be layered using sequencers that transmit bytes with serial signals. In addition, relaying can be structured using RS-485 transceivers.
+
+* The software UART tolerates the error of baud rate up to 2.5%. On the fixed temperature, the internal RC oscillator of ATtiny85 keeps the clock accuracy within +-1% change according to the page 164 of the datasheet of ATtiny25/45/85 (Rev.:2586Q-AVR-08/2013). However, the RC oscillator is affected by temperature, causing a possible error on transmission.
 
 ## Electric Schematics
 

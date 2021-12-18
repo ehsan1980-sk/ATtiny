@@ -5,7 +5,7 @@
 ##
 
 # Name of Program
-NAME := sequencer_drum_uart
+NAME := sequencer_serial_uart
 
 # Folder of Headers
 INCLUDE := ../include

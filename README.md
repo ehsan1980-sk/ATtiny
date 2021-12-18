@@ -99,7 +99,7 @@ git diff main.c
 
 * In a unidirectional networking, connections can be layered using sequencers that transmit bytes with serial signals. In addition, relaying can be structured using RS-485 transceivers.
 
-* The software UART tolerates the error of baud rate up to 2.5%. On the fixed temperature, the internal RC oscillator of ATtiny85 keeps the clock accuracy within +-1% change according to the page 164 of the datasheet of ATtiny25/45/85 (Rev.:2586Q-AVR-08/2013). However, the RC oscillator is affected by temperature, causing a possible error on transmission.
+* The software UART tolerates the error of baud rate up to 2.5%. On the fixed temperature, the internal RC oscillator of ATtiny85 keeps the clock accuracy within +-1% change according to the page 164 of the datasheet of ATtiny25/45/85 (Rev.:2586Q-AVR-08/2013). However, the RC oscillator is affected by temperature, causing a possible error on transmission, but this issue can be resolved as long as each 1 byte serial signal from the host have equal interval. In the case that the host sends 1 byte serial signal at 60Hz, ATtiny85 can know the accuracy of its internal RC oscillator; i.e., when ATtiny85 gets 60 bytes (1 seconds) from the host, it compares the counting number of 9600Hz internal timer (the actual frequency would be approx. 9615.38Hz) with the number of 9600 to adjust the value of OSCCAL.
 
 ## Electric Schematics
 

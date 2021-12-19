@@ -6,18 +6,18 @@
 
 /**
  * To accept a signal error with 50 percents per baud, get a sample at the almost center of a single bit signal in a UART Rx device.
- * If the sample rate is 4 times as much as baud rate, it would have 25 percents phase shift of a single bit signal.
+ * If the sample rate is 8 times as much as baud rate, it would have 12.5 percents phase shift of a single bit signal.
  * If you sent 8 bits, which you need 10 bits because of addition of start and stop bits,
- * the acceptable error of baud rate is that (50 - 25) divided by 10 = 2.5 percents.
- * the error with 2.5 percents phase shift is shared by Rx device and Tx device, so it should be up to 1.25 percents for each device.
+ * the acceptable error of baud rate is that (50 - 12.5) divided by 10 = 3.75 percents.
+ * the error with 3.75 percents phase shift is shared by Rx device and Tx device, so it should be up to 1.25 percents for each device.
  */
 
 #define SOFTWARE_UART_PIN_TX PB3 // Use undef to Redefine Pinout
 #define SOFTWARE_UART_PIN_RX PINB4 // Use undef to Redefine Pinout
 #define SOFTWARE_UART_DATA_BIT_NUMBER 8 // Must Be Maximum 8
 #define SOFTWARE_UART_STOP_BIT_NUMBER 1 // Must Be Minimum 1
-#define SOFTWARE_UART_INTERVAL_RX_FIRST 6
-#define SOFTWARE_UART_INTERVAL 4
+#define SOFTWARE_UART_INTERVAL_RX_FIRST 12
+#define SOFTWARE_UART_INTERVAL 8
 #define SOFTWARE_UART_STATUS_RX_COUNTER_MASK 0x0F
 #define SOFTWARE_UART_STATUS_RX_BUFFER_CHANGE_BIT 0x10
 

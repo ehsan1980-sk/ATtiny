@@ -53,13 +53,7 @@ int main(void) {
 	sequencer_interval_random_max = 0;
 	sequencer_next_random = 0;
 	sequencer_is_start = 0;
-	software_uart_tx_count = 0;
-	software_uart_tx_interval_count = SOFTWARE_UART_INTERVAL;
-	software_uart_tx_byte = 0;
-	software_uart_rx_status = 0;
-	software_uart_rx_interval_count = SOFTWARE_UART_INTERVAL;
-	software_uart_rx_byte = 0;
-	software_uart_rx_byte_buffer = 0;
+	software_uart_init();
 
 	/* Clock Calibration */
 	osccal_default = OSCCAL + CALIB_OSCCAL; // Frequency Calibration for Individual Difference at VCC = 3.3V
@@ -152,5 +146,5 @@ ISR(TIMER0_OVF_vect) {
 }
 
 ISR(TIMER1_OVF_vect) {
-	software_uart_handler_rx_tx( 1 );
+	software_uart_handler_rx_tx( SOFTWARE_UART_HANDLER_RX_TX_MODE_LOOP_BACK );
 }

@@ -45,13 +45,7 @@ int main(void) {
 	sequencer_count_update = 0;
 	sequencer_is_start = 0;
 	sequencer_program_byte = 0;
-	software_uart_tx_count = 0;
-	software_uart_tx_interval_count = SOFTWARE_UART_INTERVAL;
-	software_uart_tx_byte = 0;
-	software_uart_rx_status = 0;
-	software_uart_rx_interval_count = SOFTWARE_UART_INTERVAL;
-	software_uart_rx_byte = 0;
-	software_uart_rx_byte_buffer = 0;
+	software_uart_init();
 
 	/* Clock Calibration */
 	osccal_default = OSCCAL + CALIB_OSCCAL; // Frequency Calibration for Individual Difference at VCC = 3.3V

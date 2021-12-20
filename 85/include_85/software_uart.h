@@ -87,7 +87,7 @@ static inline void software_uart_handler_rx_tx( uint8_t handler_rx_tx_mode ) {
 					software_uart_rx_status += 0b1;
 					if ( (uart_status_rx_counter - SOFTWARE_UART_DATA_BIT_NUMBER) >= SOFTWARE_UART_STOP_BIT_NUMBER ) {
 						software_uart_rx_byte_buffer = software_uart_rx_byte;
-						software_uart_rx_status ^= software_uart_rx_status|SOFTWARE_UART_STATUS_RX_BUFFER_CHANGE_BIT; // Clear Counter and Flip Buffer Change Bit
+						software_uart_rx_status = (software_uart_rx_status & ~(SOFTWARE_UART_STATUS_RX_COUNTER_BIT_MASK)) ^ SOFTWARE_UART_STATUS_RX_BUFFER_CHANGE_BIT; // Clear Counter and Flip Buffer Change Bit
 						if ( handler_rx_tx_mode & SOFTWARE_UART_HANDLER_RX_TX_MODE_LOOP_BACK_BIT ) {
 							software_uart_tx_byte = software_uart_rx_byte;
 							software_uart_tx_count = 9;
@@ -117,7 +117,7 @@ static inline void software_uart_handler_rx_tx( uint8_t handler_rx_tx_mode ) {
 	}
 	software_uart_freq_counter_handler_loop++;
 	if ( software_uart_freq_counter_byte >= SOFTWARE_UART_FREQUENCY ) {
-		compare_counter = software_uart_freq_counter_handler_loop - SOFTWARE_UART_COMPARE_VALUE;
+		compare_counter = software_uart_freq_counter_handler_loop - (SOFTWARE_UART_COMPARE_VALUE - (SOFTWARE_UART_INTERVAL >> 1));
 		software_uart_freq_counter_handler_loop = 0;
 		software_uart_freq_counter_byte = 0;
 		software_uart_rx_status &= ~(SOFTWARE_UART_STATUS_RX_FREQ_COUNTER_START_BIT);

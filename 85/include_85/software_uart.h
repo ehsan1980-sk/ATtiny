@@ -24,8 +24,9 @@
 #define SOFTWARE_UART_BAUD_RATE 1200
 #define SOFTWARE_UART_INTERVAL_RX_FIRST 12
 #define SOFTWARE_UART_INTERVAL 8
-#define SOFTWARE_UART_STATUS_RX_COUNTER_MASK 0x0F
-#define SOFTWARE_UART_STATUS_RX_BUFFER_CHANGE_BIT 0x10
+#define SOFTWARE_UART_STATUS_RX_COUNTER_BIT_MASK 0x0F
+#define SOFTWARE_UART_STATUS_RX_BUFFER_CHANGE_BIT (0b1 << 4)
+#define SOFTWARE_UART_STATUS_RX_FREQ_COUNTER_START_BIT (0b1 << 7)
 #define SOFTWARE_UART_FREQUENCY 80 // Hz
 #define SOFTWARE_UART_COMPARE_VALUE (SOFTWARE_UART_BAUD_RATE * SOFTWARE_UART_INTERVAL)
 #define SOFTWARE_UART_COMPARE_THRESHOLD 48 // 0.5% of SOFTWARE_UART_COMPARE_VALUE
@@ -37,8 +38,8 @@ volatile uint8_t software_uart_rx_status;
 volatile uint8_t software_uart_rx_interval_count;
 volatile uint8_t software_uart_rx_byte;
 volatile uint8_t software_uart_rx_byte_buffer;
-volatile uint16_t software_uart_counter_handler_loop;
-volatile uint16_t software_uart_counter_byte;
+volatile uint16_t software_uart_freq_counter_handler_loop;
+volatile uint16_t software_uart_freq_counter_byte;
 
 static inline void software_uart_init() {
 	software_uart_tx_count = 0;
@@ -48,8 +49,8 @@ static inline void software_uart_init() {
 	software_uart_rx_interval_count = SOFTWARE_UART_INTERVAL;
 	software_uart_rx_byte = 0;
 	software_uart_rx_byte_buffer = 0;
-	software_uart_counter_handler_loop = 0;
-	software_uart_counter_byte = 0;
+	software_uart_freq_counter_handler_loop = 0;
+	software_uart_freq_counter_byte = 0;
 }
 
 /**
@@ -57,19 +58,23 @@ static inline void software_uart_init() {
  * Bit[0]: Clear = Normal, 1 = Loop Back
  * Bit[1]: Clear = Only Clear Counter, 1 = 1 = Compare to Adjust OSCCAL and Clear Counters
  */
-#define SOFTWARE_UART_HANDLER_RX_TX_MODE_LOOP_BACK 0b00000001
-#define SOFTWARE_UART_HANDLER_RX_TX_MODE_ADJUST_OSC 0b00000010
+#define SOFTWARE_UART_HANDLER_RX_TX_MODE_LOOP_BACK_BIT (0b1 << 1)
+#define SOFTWARE_UART_HANDLER_RX_TX_MODE_ADJUST_OSC_BIT (0b1 << 2)
 static inline void software_uart_handler_rx_tx( uint8_t handler_rx_tx_mode ) {
 	uint8_t uart_is_high;
 	uint8_t uart_status_rx_counter;
 	int16_t compare_counter;
 	uart_is_high = (PINB & _BV(SOFTWARE_UART_PIN_RX)) >> SOFTWARE_UART_PIN_RX; // Shift Right to Make 0b1 for Further Process
-	uart_status_rx_counter = software_uart_rx_status & SOFTWARE_UART_STATUS_RX_COUNTER_MASK;
+	uart_status_rx_counter = software_uart_rx_status & SOFTWARE_UART_STATUS_RX_COUNTER_BIT_MASK;
 	if ( ! uart_status_rx_counter ) {
 		if ( ! uart_is_high ) {
 			software_uart_rx_status += 0b1;
 			software_uart_rx_interval_count = SOFTWARE_UART_INTERVAL_RX_FIRST;
 			software_uart_rx_byte = 0;
+			if ( ! (software_uart_rx_status & SOFTWARE_UART_STATUS_RX_FREQ_COUNTER_START_BIT) ) {
+				software_uart_freq_counter_handler_loop = 0;
+				software_uart_rx_status |= SOFTWARE_UART_STATUS_RX_FREQ_COUNTER_START_BIT;
+			}
 		}
 	} else {
 		if ( --software_uart_rx_interval_count == 0 ) {
@@ -83,11 +88,11 @@ static inline void software_uart_handler_rx_tx( uint8_t handler_rx_tx_mode ) {
 					if ( (uart_status_rx_counter - SOFTWARE_UART_DATA_BIT_NUMBER) >= SOFTWARE_UART_STOP_BIT_NUMBER ) {
 						software_uart_rx_byte_buffer = software_uart_rx_byte;
 						software_uart_rx_status ^= software_uart_rx_status|SOFTWARE_UART_STATUS_RX_BUFFER_CHANGE_BIT; // Clear Counter and Flip Buffer Change Bit
-						if ( handler_rx_tx_mode & SOFTWARE_UART_HANDLER_RX_TX_MODE_LOOP_BACK ) {
+						if ( handler_rx_tx_mode & SOFTWARE_UART_HANDLER_RX_TX_MODE_LOOP_BACK_BIT ) {
 							software_uart_tx_byte = software_uart_rx_byte;
 							software_uart_tx_count = 9;
 						}
-						software_uart_counter_byte++;
+						software_uart_freq_counter_byte++;
 					}
 				}
 			}
@@ -110,12 +115,13 @@ static inline void software_uart_handler_rx_tx( uint8_t handler_rx_tx_mode ) {
 			software_uart_tx_interval_count += (SOFTWARE_UART_STOP_BIT_NUMBER - 1) * SOFTWARE_UART_INTERVAL;
 		}
 	}
-	software_uart_counter_handler_loop++;
-	if ( software_uart_counter_byte >= SOFTWARE_UART_FREQUENCY ) {
-		compare_counter = software_uart_counter_handler_loop - SOFTWARE_UART_COMPARE_VALUE;
-		software_uart_counter_handler_loop = 0;
-		software_uart_counter_byte = 0;
-		if ( handler_rx_tx_mode & SOFTWARE_UART_HANDLER_RX_TX_MODE_ADJUST_OSC ) {
+	software_uart_freq_counter_handler_loop++;
+	if ( software_uart_freq_counter_byte >= SOFTWARE_UART_FREQUENCY ) {
+		compare_counter = software_uart_freq_counter_handler_loop - SOFTWARE_UART_COMPARE_VALUE;
+		software_uart_freq_counter_handler_loop = 0;
+		software_uart_freq_counter_byte = 0;
+		software_uart_rx_status &= ~(SOFTWARE_UART_STATUS_RX_FREQ_COUNTER_START_BIT);
+		if ( handler_rx_tx_mode & SOFTWARE_UART_HANDLER_RX_TX_MODE_ADJUST_OSC_BIT ) {
 			if ( compare_counter >= SOFTWARE_UART_COMPARE_THRESHOLD ) {
 				if ( OSCCAL > 0 ) OSCCAL--;
 			} else if ( compare_counter <= -SOFTWARE_UART_COMPARE_THRESHOLD ) {

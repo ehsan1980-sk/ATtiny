@@ -146,5 +146,5 @@ ISR(TIMER0_OVF_vect) {
 }
 
 ISR(TIMER1_OVF_vect) {
-	software_uart_handler_rx_tx( SOFTWARE_UART_HANDLER_RX_TX_MODE_LOOP_BACK );
+	software_uart_handler_rx_tx( SOFTWARE_UART_HANDLER_RX_TX_MODE_LOOP_BACK_BIT );
 }

@@ -29,6 +29,7 @@
 #define SOFTWARE_UART_STATUS_RX_FREQ_COUNTER_START_BIT (0b1 << 7)
 #define SOFTWARE_UART_FREQUENCY 80 // Hz
 #define SOFTWARE_UART_COMPARE_VALUE (SOFTWARE_UART_BAUD_RATE * SOFTWARE_UART_INTERVAL)
+#define SOFTWARE_UART_COMPARE_TIMEOUT (SOFTWARE_UART_COMPARE_VALUE * 2)
 #define SOFTWARE_UART_COMPARE_THRESHOLD 48 // 0.5% of SOFTWARE_UART_COMPARE_VALUE
 
 volatile uint8_t software_uart_tx_count;
@@ -115,7 +116,11 @@ static inline void software_uart_handler_rx_tx( uint8_t handler_rx_tx_mode ) {
 			software_uart_tx_interval_count += (SOFTWARE_UART_STOP_BIT_NUMBER - 1) * SOFTWARE_UART_INTERVAL;
 		}
 	}
-	software_uart_freq_counter_handler_loop++;
+	if ( ++software_uart_freq_counter_handler_loop >= SOFTWARE_UART_COMPARE_TIMEOUT ) {
+		software_uart_freq_counter_handler_loop = 0;
+		software_uart_freq_counter_byte = 0;
+		software_uart_rx_status &= ~(SOFTWARE_UART_STATUS_RX_FREQ_COUNTER_START_BIT);
+	}
 	if ( software_uart_freq_counter_byte >= SOFTWARE_UART_FREQUENCY ) {
 		compare_counter = software_uart_freq_counter_handler_loop - (SOFTWARE_UART_COMPARE_VALUE - (SOFTWARE_UART_INTERVAL >> 1));
 		software_uart_freq_counter_handler_loop = 0;
